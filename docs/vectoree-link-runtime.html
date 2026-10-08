@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>外部项目关联 Vectoree · 运行时</title>
+<style>
+  :root {
+    --paper: #f3efe6;
+    --ink: #1c1915;
+    --muted: #6d655c;
+    --line: #d9d1c3;
+    --card: #fffdf8;
+    --accent: #0f6e56;
+    --accent-soft: #e5f3ee;
+    --warn: #8a5a12;
+    --danger: #8f3d32;
+    --shadow: 0 1px 0 rgba(28, 25, 21, 0.04);
+    --mono: "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    --sans: "Iowan Old Style", "Palatino Linotype", Palatino, "Songti SC", "Source Han Serif SC", serif;
+    --ui: "Avenir Next", "PingFang SC", "Noto Sans SC", "Helvetica Neue", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--ui);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  button, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .app { min-height: 100%; display: grid; grid-template-rows: auto auto 1fr; }
+  header {
+    padding: 22px 28px 8px;
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    align-items: flex-end;
+  }
+  h1 {
+    font-family: var(--sans);
+    font-weight: 500;
+    font-size: 28px;
+    letter-spacing: -0.03em;
+    margin: 0 0 6px;
+  }
+  .lede { margin: 0; max-width: 760px; color: var(--muted); }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .controls button, .controls select {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 7px 12px;
+  }
+  .controls button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .progress {
+    margin: 0 28px 12px;
+    height: 3px;
+    background: var(--line);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .progress > span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 220px 1fr 360px;
+    gap: 16px;
+    padding: 0 20px 24px;
+    min-height: 0;
+  }
+  .phases, .board, .inspector {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    min-height: 0;
+    min-width: 0;
+    box-shadow: var(--shadow);
+  }
+  .phases { padding: 12px; overflow: auto; }
+  .phase-btn {
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    border-radius: 10px;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+  }
+  .phase-btn small { display: block; color: var(--muted); font-size: 11px; }
+  .phase-btn.active { background: var(--accent-soft); }
+  .phase-btn .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 99px;
+    margin-right: 6px;
+  }
+  .board { display: flex; flex-direction: column; overflow: hidden; }
+  .actors {
+    display: grid;
+    grid-template-columns: 228px repeat(7, minmax(0, 1fr));
+    gap: 0;
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    background: var(--card);
+    z-index: 2;
+  }
+  .actor {
+    padding: 12px 6px 10px;
+    text-align: center;
+    border-left: 1px dashed transparent;
+  }
+  .actor strong { display: block; font-size: 12px; }
+  .actor span { display: block; color: var(--muted); font-size: 10px; font-family: var(--mono); }
+  .trace { overflow: auto; flex: 1; padding-bottom: 12px; }
+  .row {
+    display: grid;
+    grid-template-columns: 228px repeat(7, minmax(0, 1fr));
+    min-height: 62px;
+    position: relative;
+  }
+  .row .meta {
+    padding: 8px 10px 8px 12px;
+    font-size: 12px;
+    color: var(--ink);
+    z-index: 1;
+  }
+  .row .meta b { font-family: var(--mono); color: var(--muted); font-weight: 500; }
+  .row .meta .path {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .cell { position: relative; }
+  .cell::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 0; bottom: 0;
+    border-left: 1px dashed #e4dccf;
+  }
+  .row.future { opacity: 0.38; }
+  .row.current { background: #f7fbf9; opacity: 1; }
+  .row.current .meta .path { color: var(--accent); }
+  .arrow {
+    position: absolute;
+    top: 26px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    z-index: 1;
+  }
+  .arrow .shaft {
+    height: 1.5px;
+    background: var(--ink);
+    flex: 1;
+    position: relative;
+  }
+  .arrow.rtl .shaft { background: var(--danger); }
+  .inspector h2, .note, .foot { overflow-wrap: anywhere; }
+  .arrow.ltr .shaft::after,
+  .arrow.rtl .shaft::before {
+    content: "";
+    position: absolute;
+    top: -4px;
+    border: 5px solid transparent;
+  }
+  .arrow.ltr .shaft::after {
+    right: -1px;
+    border-left-color: var(--ink);
+  }
+  .arrow.rtl .shaft::before {
+    left: -1px;
+    border-right-color: var(--danger);
+  }
+  .self {
+    position: absolute;
+    left: calc(50% + 6px);
+    top: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    border: 1px solid var(--ink);
+    border-radius: 8px;
+    padding: 2px 6px;
+    background: var(--card);
+    z-index: 1;
+  }
+  .inspector { padding: 16px 16px 20px; overflow: auto; }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+  .inspector h2 {
+    font-family: var(--sans);
+    font-weight: 500;
+    font-size: 22px;
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+  }
+  .who {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .pill {
+    border-radius: 999px;
+    padding: 2px 8px;
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 12px;
+  }
+  .pill.ret { background: var(--danger); }
+  pre {
+    background: #1c1915;
+    color: #f3efe6;
+    border-radius: 12px;
+    padding: 12px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 8px 0 14px;
+  }
+  .note {
+    background: var(--accent-soft);
+    border-radius: 12px;
+    padding: 10px 12px;
+    color: #144237;
+    margin-bottom: 12px;
+  }
+  .secret { color: #e7c27a; }
+  .foot {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  @media (max-width: 1100px) {
+    .layout { grid-template-columns: 1fr; }
+    .phases { display: flex; gap: 8px; overflow: auto; }
+    .phase-btn { width: auto; white-space: nowrap; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>外部项目关联 Vectoree 的运行时</h1>
+      <p class="lede">按 Docker 部署演一遍。浏览器只和 Nginx（:2026）说话；项目 key 由 Next.js 向 Vectoree 铸造，再写进两个容器各自的 <span style="font-family:var(--mono)">/app</span>。之后登录时，Gateway 用这把 key 代理 Vectoree Auth，Vectoree 的用户 token 不回到浏览器。</p>
+    </div>
+    <div class="controls">
+      <button id="prev" type="button">上一步</button>
+      <button id="play" class="primary" type="button">播放</button>
+      <button id="next" type="button">下一步</button>
+      <button id="reset" type="button">重头</button>
+      <label>速度
+        <select id="speed">
+          <option value="1400">正常</option>
+          <option value="800">快</option>
+          <option value="2200">慢</option>
+        </select>
+      </label>
+    </div>
+  </header>
+  <div class="progress" aria-hidden="true"><span id="bar"></span></div>
+  <div class="layout">
+    <nav class="phases" id="phases"></nav>
+    <section class="board">
+      <div class="actors" id="actors"></div>
+      <div class="trace" id="trace"></div>
+    </section>
+    <aside class="inspector" id="inspector"></aside>
+  </div>
+</div>
+<script>
+const ACTORS = [
+  { id: "browser", name: "浏览器", hint: "用户" },
+  { id: "nginx", name: "Nginx", hint: ":2026" },
+  { id: "next", name: "Next.js", hint: "linker" },
+  { id: "loop", name: "回环回调", hint: ":53682" },
+  { id: "gateway", name: "Gateway", hint: ":8001" },
+  { id: "disk", name: "磁盘", hint: "/app" },
+  { id: "ve", name: "Vectoree", hint: "vectoree.ai" },
+];
+
+const PROJECT = "3f2a1c90-7b14-4e2d-9a55-0c8e6d4b1a27";
+const STATE = "a91c0e44b7d25f18e6ab0031c84d7720";
+const CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+
+const STEPS = [
+  {
+    phase: "1 探测",
+    color: "#5c6b7a",
+    title: "落地页先问：这个部署关联过没有",
+    summary: "用户点 Get Started with 2.0。前端同时问自己的磁盘和 Gateway。",
+    from: "browser", to: "nginx",
+    kind: "request",
+    label: "GET /api/vectoree/link-status",
+    call: `GET http://127.0.0.1:2026/api/vectoree/link-status
+Accept: application/json`,
+    response: `200
+{ "linked": false }`,
+    note: "Nginx 的 location /api/vectoree/ 比 /api/ 更长，这条转到前端，不进 Gateway。",
+  },
+  {
+    phase: "1 探测",
+    color: "#5c6b7a",
+    title: "Nginx 把关联状态转给 Next.js",
+    summary: "前端进程读自己容器里的凭证文件，此时还是空的。",
+    from: "nginx", to: "next",
+    kind: "request",
+    label: "proxy_pass 同一路径",
+    call: `GET http://frontend:3000/api/vectoree/link-status
+Host: 127.0.0.1:2026
+X-Forwarded-Proto: http`,
+    response: `Next 读 /app/.vectoree/config.json 与 /app/.env
+两处都没有 VECTOREE_API_KEY
+→ { "linked": false }`,
+    note: "公开响应只含 linked / projectName / apiUrl。key、accessToken 不会出现在 JSON 里。",
+  },
+  {
+    phase: "1 探测",
+    color: "#5c6b7a",
+    title: "再问 Gateway：它自己的 /app 里有没有 key",
+    summary: "浏览器并行请求 setup-status。这条走 /api/，所以进 Gateway。",
+    from: "browser", to: "nginx",
+    kind: "request",
+    label: "GET /api/v1/auth/setup-status",
+    call: `GET http://127.0.0.1:2026/api/v1/auth/setup-status
+credentials: include`,
+    response: `Nginx → Gateway :8001
+Gateway 依次看环境变量、/app/.vectoree/config.json、/app/.env
+没有 key 时不走 Vectoree 短路，响应里没有 vectoree_linked 字段，
+只有 needs_setup 与 registration_enabled。
+前端把缺省当成未关联。`,
+    note: "两个容器各有一份 /app。前端没写进去，不代表 Gateway 已经有 key。",
+  },
+  {
+    phase: "1 探测",
+    color: "#5c6b7a",
+    title: "未关联，打开 /link",
+    summary: "浏览器导航到关联页。识别项目 ID 发生在页面里，没有出网。",
+    from: "browser", to: "next",
+    kind: "request",
+    label: "GET /link",
+    call: `GET http://127.0.0.1:2026/link
+（Nginx location / → frontend:3000）
+
+随后用户粘贴控制台 URL，页面本地执行 extractProjectId：
+  优先 Dashboard project:(uuid)
+  其次 ?projectId= / ?project_id=
+  否则正文里第一处 UUID
+得到 ${PROJECT}`,
+    response: `无网络请求。点 Recognize 只改输入框。`,
+    note: "apiUrl 默认 https://vectoree.ai，必须是 origin，不能带路径、query 或账号密码。",
+  },
+  {
+    phase: "2 发起",
+    color: "#0f6e56",
+    title: "浏览器提交要关联的项目",
+    summary: "点 Connect。body 只有 API origin 和项目 UUID。",
+    from: "browser", to: "nginx",
+    kind: "request",
+    label: "POST /api/vectoree/link/start",
+    call: `POST http://127.0.0.1:2026/api/vectoree/link/start
+Content-Type: application/json
+
+{
+  "apiUrl": "https://vectoree.ai",
+  "projectId": "${PROJECT}"
+}`,
+    response: `尚未返回。Next 要先建好回调端口。`,
+    note: "projectId 必须整段匹配 UUID，否则 400，不会去打 Vectoree。",
+  },
+  {
+    phase: "2 发起",
+    color: "#0f6e56",
+    title: "Next 生成 PKCE，并听上回环端口",
+    summary: "同一进程里拉起一个只收 /callback 的 HTTP 服务。",
+    from: "next", to: "loop",
+    kind: "request",
+    label: "listen 0.0.0.0:53682",
+    call: `进程内：
+verifier  = randomBytes(32) 的 base64url     （只留在 Next 内存）
+challenge = SHA-256(verifier) 的 base64url
+state     = randomBytes(16) 的 hex
+          = ${STATE}
+
+Docker：VECTOREE_LINK_CALLBACK_PORT=53682
+监听 0.0.0.0:53682
+宿主机发布 ${"${BIND_HOST:-127.0.0.1}"}:53682 → 容器 53682`,
+    response: `redirect_uri = http://127.0.0.1:53682/callback
+超时 180 秒，超时则这次登录作废。`,
+    note: "本机 pnpm dev 不设这个端口时，监听 127.0.0.1 的随机端口，redirect_uri 用实际端口。",
+  },
+  {
+    phase: "2 发起",
+    color: "#0f6e56",
+    title: "把授权地址交回页面，并开始每秒轮询",
+    summary: "容器里 open() 系统浏览器通常失败，页面给出 Open login 链接。",
+    from: "next", to: "browser",
+    kind: "response",
+    label: "200 pending + authorizeUrl",
+    call: `POST /api/vectoree/link/start 的响应：
+
+{
+  "status": "pending",
+  "authorizeUrl": "https://vectoree.ai/api/system/auth/cli/authorize?...",
+  "apiUrl": "https://vectoree.ai",
+  "projectId": "${PROJECT}"
+}`,
+    response: `页面每 1 秒：
+GET /api/vectoree/link
+→ 仍是 { "status": "pending", "authorizeUrl": "..." }
+直到 linked、error，或 180 秒超时。`,
+    note: "轮询接口是 publicJson，不会带出 verifier、code 或 key。",
+  },
+  {
+    phase: "3 授权",
+    color: "#8a5a12",
+    title: "用户浏览器直接打开 Vectoree 授权页",
+    summary: "这一跳不经过 DeerFlow。DeerFlow 看不到控制台密码。",
+    from: "browser", to: "ve",
+    kind: "request",
+    label: "GET /api/system/auth/cli/authorize",
+    call: `GET https://vectoree.ai/api/system/auth/cli/authorize
+  ?response_type=code
+  &code_challenge=${CHALLENGE}
+  &code_challenge_method=S256
+  &redirect_uri=http://127.0.0.1:53682/callback
+  &state=${STATE}`,
+    response: `Vectoree 展示自己的登录页。
+用户在 vectoree.ai 上完成控制台登录。
+会话 cookie 属于 Vectoree，不写进 DeerFlow。`,
+    note: "这是控制台身份（CLI OAuth），不是后来 DeerFlow 用户的邮箱登录。",
+  },
+  {
+    phase: "3 授权",
+    color: "#8a5a12",
+    title: "Vectoree 把浏览器重定向回本机回调",
+    summary: "授权码只出现在宿主机 loopback 上，不经过 Nginx :2026。",
+    from: "ve", to: "browser",
+    kind: "response",
+    label: "302 → 127.0.0.1:53682/callback",
+    call: `HTTP/1.1 302
+Location: http://127.0.0.1:53682/callback
+  ?code=ve_auth_code_7f3a
+  &state=${STATE}`,
+    response: `浏览器随即请求该 Location。
+目标是用户自己的 127.0.0.1，不是 vectoree.ai。`,
+    note: "code 是一次性授权码。没有配对的 code_verifier，下一步换票会失败。",
+  },
+  {
+    phase: "3 授权",
+    color: "#8a5a12",
+    title: "浏览器打到前端容器里的回环服务",
+    summary: "Docker 把宿主机 53682 送进 Next 进程。state 必须和内存里的一致。",
+    from: "browser", to: "loop",
+    kind: "request",
+    label: "GET /callback?code&state",
+    call: `GET http://127.0.0.1:53682/callback?code=ve_auth_code_7f3a&state=${STATE}
+
+路径不是 /callback → 404
+缺少 code 或 state 不匹配 → 400 Invalid OAuth callback`,
+    response: `200 text/html
+Vectoree connected
+You can close this window and return to vectoree-deer-flow.
+
+同时把 code resolve 给 linker.finish()`,
+    note: "校验通过后服务关掉。下一次 Connect 会作废上一次的 state。",
+  },
+  {
+    phase: "4 铸钥",
+    color: "#3d6f99",
+    title: "Next 用授权码换控制台会话",
+    summary: "服务端直连 Vectoree。换回来的是 accessToken，还不是项目 key。",
+    from: "next", to: "ve",
+    kind: "request",
+    label: "POST /api/system/auth/cli/token",
+    call: `POST https://vectoree.ai/api/system/auth/cli/token
+Accept: application/json
+Content-Type: application/json
+
+{
+  "grant_type": "authorization_code",
+  "code": "ve_auth_code_7f3a",
+  "code_verifier": "<内存中的 verifier>",
+  "redirect_uri": "http://127.0.0.1:53682/callback"
+}`,
+    response: `200
+{
+  "accessToken": "console-session-…",
+  "refreshToken": "console-refresh-…"
+}`,
+    note: "这两枚 token 是控制台会话。后面查项目、铸 key 用它们。浏览器拿不到。",
+  },
+  {
+    phase: "4 铸钥",
+    color: "#3d6f99",
+    title: "用控制台 token 核对这个项目属于该账号",
+    summary: "拉项目列表，按 id 找名字。找不到就失败，不会铸 key。",
+    from: "next", to: "ve",
+    kind: "request",
+    label: "GET /api/projects",
+    call: `GET https://vectoree.ai/api/projects
+Accept: application/json
+Authorization: Bearer console-session-…`,
+    response: `200 [ { "id": "${PROJECT}", "name": "acme-app" }, … ]
+命中后 projectName = "acme-app"
+列表里没有这个 id →
+That project was not found on this Vectoree account`,
+    note: "Bearer 是刚刚换到的控制台 accessToken，不是 sk-ve- 项目 key。",
+  },
+  {
+    phase: "4 铸钥",
+    color: "#3d6f99",
+    title: "铸造项目 API key",
+    summary: "key 带固定 scope。响应里的 apiKey 必须以 sk-ve- 开头。",
+    from: "next", to: "ve",
+    kind: "request",
+    label: "POST /api/gateway/keys",
+    call: `POST https://vectoree.ai/api/gateway/keys
+Authorization: Bearer console-session-…
+X-Project-Id: ${PROJECT}
+User-Agent: VectoreeCLI
+Content-Type: application/json
+
+{
+  "name": "CLI — vectoree-deer-flow-frontend",
+  "projectId": "${PROJECT}",
+  "deviceId": "<.vectoree/device-id，没有就现造 UUID>",
+  "localFolderPath": "/app",
+  "scopes": [
+    "gateway:chat", "gateway:models",
+    "tools:*", "database:*", "storage:*", "auth:*"
+  ]
+}`,
+    response: `200
+{
+  "id": "key_8c1e",
+  "apiKey": "sk-ve-v1-…"
+}`,
+    note: "device-id 写在前端容器 /app/.vectoree/device-id，权限 0600。名字最长 128 字符。",
+  },
+  {
+    phase: "5 落盘",
+    color: "#6b4c9a",
+    title: "先写入前端容器自己的 /app",
+    summary: "config.json 与 .env 一起更新。这是浏览器轮询能看到 linked 的那份。",
+    from: "next", to: "disk",
+    kind: "request",
+    label: "写 config.json 与 .env",
+    call: `写 /app/.vectoree/config.json   目录 0700，文件 0600
+{
+  "apiUrl": "https://vectoree.ai",
+  "accessToken": "console-session-…",
+  "refreshToken": "console-refresh-…",
+  "apiKey": "sk-ve-v1-…",
+  "projectId": "${PROJECT}",
+  "projectName": "acme-app",
+  "keyId": "key_8c1e"
+}
+
+改 /app/.env：
+VECTOREE_API_URL=https://vectoree.ai
+VECTOREE_API_KEY=sk-ve-v1-…
+VECTOREE_API_BASE=https://vectoree.ai/api/v1`,
+    response: `先写临时文件再 rename。
+蛇形别名 api_key / project_id 会被删掉，只留驼峰字段。`,
+    note: "只写前端这份还不够。Gateway 是另一个容器，读不到这里的文件。",
+  },
+  {
+    phase: "5 落盘",
+    color: "#6b4c9a",
+    title: "Next 把同一套凭证推给 Gateway",
+    summary: "容器网络直连 gateway:8001，不经浏览器，也不经 Nginx。",
+    from: "next", to: "gateway",
+    kind: "request",
+    label: "POST /api/internal/vectoree/project-credentials",
+    call: `POST http://gateway:8001/api/internal/vectoree/project-credentials
+Accept: application/json
+Content-Type: application/json
+X-DeerFlow-Internal-Token: <DEER_FLOW_INTERNAL_AUTH_TOKEN>
+Authorization: Bearer <同一个内部 token>
+
+{
+  "apiUrl": "https://vectoree.ai",
+  "apiKey": "sk-ve-v1-…",
+  "apiBase": "https://vectoree.ai/api/v1",
+  "accessToken": "console-session-…",
+  "refreshToken": "console-refresh-…",
+  "projectId": "${PROJECT}",
+  "projectName": "acme-app",
+  "keyId": "key_8c1e"
+}`,
+    response: `Gateway 校验内部调用者，否则 403。
+通过后写自己的 /app/.vectoree/config.json 和 /app/.env，
+再 reload_app_config()。
+200 { "ok": true }`,
+    note: "没设置 DEER_FLOW_INTERNAL_GATEWAY_BASE_URL 时这一跳直接跳过。本机前后端共用仓库目录时，Gateway 下次登录会自己读那一份 .env。",
+  },
+  {
+    phase: "5 落盘",
+    color: "#6b4c9a",
+    title: "轮询看到 linked，页面放行去登录",
+    summary: "linker 内存状态改成 linked。用户点 Continue to sign in。",
+    from: "browser", to: "next",
+    kind: "request",
+    label: "GET /api/vectoree/link",
+    call: `GET http://127.0.0.1:2026/api/vectoree/link
+
+{
+  "status": "linked",
+  "apiUrl": "https://vectoree.ai",
+  "projectId": "${PROJECT}",
+  "projectName": "acme-app"
+}`,
+    response: `页面进入成功态。
+下一步导航：
+GET /login?next=/workspace`,
+    note: "若 Gateway 那一跳失败，状态是 error，前端磁盘上的 key 也不会被当成成功。",
+  },
+  {
+    phase: "6 登录",
+    color: "#8f3d32",
+    title: "登录页再次确认两边都已关联",
+    summary: "未关联会被送回 /link。关联之后才允许走 Vectoree 账号登录。",
+    from: "browser", to: "nginx",
+    kind: "request",
+    label: "link-status + setup-status",
+    call: `并行：
+GET /api/vectoree/link-status
+  → Next 读到 apiKey → { "linked": true, "projectName": "acme-app" }
+
+GET /api/v1/auth/setup-status
+  → Nginx → Gateway
+  → Gateway 读到自己的 /app/.env
+  → { "needs_setup": false, "registration_enabled": true, "vectoree_linked": true }
+
+另有 GET /api/v1/auth/providers（SSO 列表，与这次关联无关）`,
+    response: `登录页设 vectoreeLinked = true。
+注册开关因此打开，即使用户还不是本地管理员。`,
+    note: "Gateway 若只在进程启动时读过空 key、且文件不在该容器里，这里仍会是未关联。第一次关联后需要重启一次 Gateway。",
+  },
+  {
+    phase: "6 登录",
+    color: "#8f3d32",
+    title: "用户提交邮箱和密码",
+    summary: "表单进 Gateway。Gateway 不把密码存进 DeerFlow。",
+    from: "browser", to: "gateway",
+    kind: "request",
+    label: "POST /api/v1/auth/login/local",
+    call: `POST http://127.0.0.1:2026/api/v1/auth/login/local
+Content-Type: application/x-www-form-urlencoded
+credentials: include
+
+username=ada%40acme.dev
+&password=••••••••
+&remember_me=true
+
+Nginx location /api/ → gateway:8001`,
+    response: `Gateway 发现 resolve_vectoree_link() 有 key，
+放弃本地密码校验，改为代理 Vectoree。`,
+    note: "注册走 POST /api/v1/auth/register，JSON body：email、password、remember_me。代理动作同为 register。",
+  },
+  {
+    phase: "6 登录",
+    color: "#8f3d32",
+    title: "Gateway 用项目 key 向 Vectoree 换用户会话",
+    summary: "Authorization 是 sk-ve-，不是控制台 accessToken。",
+    from: "gateway", to: "ve",
+    kind: "request",
+    label: "POST /api/auth/sessions?client_type=server",
+    call: `POST https://vectoree.ai/api/auth/sessions?client_type=server
+Authorization: Bearer sk-ve-v1-…
+Accept: application/json
+Content-Type: application/json
+
+{ "email": "ada@acme.dev", "password": "••••••••" }`,
+    response: `两条都算“还不能发 DeerFlow cookie”：
+1) 200 且 requireEmailVerification=true
+2) 403 且 error=AUTH_NEED_VERIFICATION
+
+Gateway 对浏览器只回：
+200 { "require_email_verification": true,
+      "message": "Enter the 8-digit code sent to your email." }
+
+Vectoree 回的 accessToken 被丢弃。`,
+    note: "若直接 2xx、带 user.email 和 accessToken，则跳过验证码，马上发 DeerFlow cookie。密码错误对浏览器是 401，不区分账号是否存在。",
+  },
+  {
+    phase: "6 登录",
+    color: "#8f3d32",
+    title: "用户提交 8 位邮箱验证码",
+    summary: "仍由 Gateway 代理。浏览器不调用 /api/system/auth/*，也不调用 Vectoree 的 /api/auth/*。",
+    from: "browser", to: "gateway",
+    kind: "request",
+    label: "POST /api/v1/auth/vectoree/verify",
+    call: `POST http://127.0.0.1:2026/api/v1/auth/vectoree/verify
+Content-Type: application/json
+credentials: include
+
+{
+  "email": "ada@acme.dev",
+  "otp": "48392017",
+  "remember_me": true
+}`,
+    response: `Gateway 再请求：
+POST https://vectoree.ai/api/auth/email/verify?client_type=server
+Authorization: Bearer sk-ve-v1-…
+{ "email": "ada@acme.dev", "otp": "48392017" }`,
+    note: "重发验证码是另一条：POST /api/v1/auth/vectoree/resend → Vectoree POST /api/auth/email/send-verification?client_type=server。",
+  },
+  {
+    phase: "6 登录",
+    color: "#8f3d32",
+    title: "Vectoree 确认用户，Gateway 签发自己的 cookie",
+    summary: "本地用户是影子账号。浏览器此后只带 DeerFlow 的 HttpOnly 会话。",
+    from: "gateway", to: "browser",
+    kind: "response",
+    label: "Set-Cookie access_token",
+    call: `Vectoree → Gateway（不转发）：
+200 {
+  "accessToken": "vectoree-user-…",
+  "user": { "email": "ada@acme.dev" }
+}
+
+Gateway 本地：
+按邮箱查找或创建用户。
+密码存的是随机 hash，不是用户刚输入的那一个。
+第一个这样的用户成为 admin。`,
+    response: `Set-Cookie: access_token=<DeerFlow JWT>; HttpOnly
+另有 csrf_token，和会话一起过期。
+
+浏览器随后打开 /workspace。
+模型和工具继续用服务器上的 sk-ve-v1-…，
+不使用这枚用户 token，也不使用控制台 accessToken。`,
+    note: "关联结束的标志不是浏览器拿到 Vectoree token，而是两份 /app 里有项目 key，并且 DeerFlow 用自己的 cookie 认出这个邮箱。",
+  },
+];
+
+const phases = [];
+for (const step of STEPS) {
+  if (!phases.some((p) => p.name === step.phase)) {
+    phases.push({ name: step.phase, color: step.color, index: phases.length });
+  }
+}
+
+const actorsEl = document.getElementById("actors");
+const traceEl = document.getElementById("trace");
+const phasesEl = document.getElementById("phases");
+const inspectorEl = document.getElementById("inspector");
+const barEl = document.getElementById("bar");
+const indexOf = (id) => ACTORS.findIndex((a) => a.id === id);
+
+actorsEl.innerHTML = `<div></div>` + ACTORS.map((a) =>
+  `<div class="actor"><strong>${a.name}</strong><span>${a.hint}</span></div>`
+).join("");
+
+phases.forEach((phase) => {
+  const btn = document.createElement("button");
+  btn.className = "phase-btn";
+  btn.type = "button";
+  const count = STEPS.filter((s) => s.phase === phase.name).length;
+  btn.innerHTML = `<span class="dot" style="background:${phase.color}"></span>${phase.name}<small>${count} 跳</small>`;
+  btn.addEventListener("click", () => {
+    const i = STEPS.findIndex((s) => s.phase === phase.name);
+    go(i, false);
+  });
+  phasesEl.appendChild(btn);
+});
+
+STEPS.forEach((step, i) => {
+  const row = document.createElement("div");
+  row.className = "row future";
+  row.dataset.i = String(i);
+  const from = indexOf(step.from);
+  const to = indexOf(step.to);
+  const fromName = ACTORS[from].name;
+  const toName = ACTORS[to].name;
+  const cells = ACTORS.map(() => `<div class="cell"></div>`).join("");
+  row.innerHTML = `<div class="meta"><b>${String(i + 1).padStart(2, "0")}</b> ${fromName} → ${toName}<div class="path">${step.label}</div></div>${cells}`;
+  traceEl.appendChild(row);
+
+  const arrowHost = document.createElement("div");
+  arrowHost.style.position = "absolute";
+  arrowHost.style.inset = "0 0 0 228px";
+  arrowHost.style.pointerEvents = "none";
+  if (from !== to) {
+    const left = Math.min(from, to);
+    const right = Math.max(from, to);
+    const arrow = document.createElement("div");
+    arrow.className = `arrow ${to > from ? "ltr" : "rtl"}`;
+    const start = ((left + 0.5) / 7) * 100;
+    const end = ((right + 0.5) / 7) * 100;
+    arrow.style.left = start + "%";
+    arrow.style.width = (end - start) + "%";
+    arrow.innerHTML = `<span class="shaft"></span>`;
+    arrowHost.appendChild(arrow);
+  } else {
+    const tag = document.createElement("div");
+    tag.className = "self";
+    tag.style.left = `calc(${(from + 0.5) / 7 * 100}% + 8px)`;
+    tag.textContent = "本地";
+    arrowHost.appendChild(tag);
+  }
+  row.appendChild(arrowHost);
+  row.addEventListener("click", () => go(i, false));
+});
+
+let cursor = -1;
+let timer = null;
+
+function renderInspector(step, i) {
+  const from = ACTORS.find((a) => a.id === step.from);
+  const to = ACTORS.find((a) => a.id === step.to);
+  const verb = step.kind === "response" ? "返回给" : "请求";
+  inspectorEl.innerHTML = `
+    <p class="kicker">${step.phase} · ${i + 1} / ${STEPS.length}</p>
+    <h2>${step.title}</h2>
+    <div class="who">
+      <span class="pill ${step.kind === "response" ? "ret" : ""}">${from.name}</span>
+      <span>${verb}</span>
+      <span class="pill">${to.name}</span>
+    </div>
+    <div class="note">${step.summary}</div>
+    <p class="kicker">这一跳</p>
+    <pre>${escapeHtml(step.call)}</pre>
+    <p class="kicker">对方怎么回</p>
+    <pre>${escapeHtml(step.response)}</pre>
+    <div class="note">${step.note}</div>
+    <p class="foot">图按 docker compose：回调端口 53682，内部地址 http://gateway:8001。密钥在图中用省略号，真实值只落在两个容器的 /app，不进浏览器。</p>
+  `;
+}
+
+function escapeHtml(text) {
+  return text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+
+function go(i, auto) {
+  cursor = Math.max(-1, Math.min(STEPS.length - 1, i));
+  const rows = traceEl.querySelectorAll(".row");
+  rows.forEach((row, idx) => {
+    row.classList.toggle("future", idx > cursor);
+    row.classList.toggle("current", idx === cursor);
+  });
+  document.querySelectorAll(".phase-btn").forEach((btn, idx) => {
+    const step = STEPS[cursor];
+    btn.classList.toggle("active", step && phases[idx].name === step.phase);
+  });
+  const pct = cursor < 0 ? 0 : ((cursor + 1) / STEPS.length) * 100;
+  barEl.style.width = pct + "%";
+  if (cursor >= 0) {
+    renderInspector(STEPS[cursor], cursor);
+    rows[cursor].scrollIntoView({ block: "nearest", behavior: auto ? "smooth" : "auto" });
+  }
+  if (cursor >= STEPS.length - 1) stop();
+}
+
+function play() {
+  if (timer) { stop(); return; }
+  document.getElementById("play").textContent = "暂停";
+  if (cursor >= STEPS.length - 1) cursor = -1;
+  timer = setInterval(() => go(cursor + 1, true), Number(document.getElementById("speed").value));
+  go(cursor + 1, true);
+}
+function stop() {
+  clearInterval(timer);
+  timer = null;
+  document.getElementById("play").textContent = "播放";
+}
+
+document.getElementById("play").addEventListener("click", play);
+document.getElementById("prev").addEventListener("click", () => { stop(); go(cursor - 1, false); });
+document.getElementById("next").addEventListener("click", () => { stop(); go(cursor + 1, false); });
+document.getElementById("reset").addEventListener("click", () => { stop(); go(-1, false); inspectorEl.innerHTML = `<p class="kicker">尚未开始</p><h2>从探测到签发 DeerFlow cookie</h2><div class="note">点播放。每一步是一次真实跳转：谁、对谁、什么方法、什么路径。灰色是还没发生的。</div>`; });
+document.getElementById("speed").addEventListener("change", () => {
+  if (!timer) return;
+  stop();
+  play();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowRight") { stop(); go(cursor + 1, false); }
+  if (event.key === "ArrowLeft") { stop(); go(cursor - 1, false); }
+  if (event.key === " ") { event.preventDefault(); play(); }
+});
+
+inspectorEl.innerHTML = `<p class="kicker">尚未开始</p><h2>从探测到签发 DeerFlow cookie</h2><div class="note">点播放。共 ${STEPS.length} 跳，分成探测、发起、授权、铸钥、落盘、登录。箭头向右是请求，向左的红箭头是回程。</div><p class="foot">参与者：浏览器、Nginx :2026、Next.js linker、回环 :53682、Gateway :8001、两个容器的 /app 磁盘、Vectoree Cloud。</p>`;
+go(-1, false);
+</script>
+</body>
+</html>
