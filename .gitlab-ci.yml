@@ -110,7 +110,7 @@ publish_github:
         echo "Set GITHUB_TOKEN in GitLab CI/CD variables (Masked, Protected, environment All)."
         exit 1
       fi
-      github_url="https://github.com/VectoreeAI/vectoree-deerflow.git"
+      github_url="https://x-access-token:${GITHUB_TOKEN}@github.com/VectoreeAI/vectoree-deerflow.git"
       git fetch "$github_url" refs/heads/main
       if git merge-base --is-ancestor FETCH_HEAD HEAD; then
         git push "$github_url" HEAD:refs/heads/main

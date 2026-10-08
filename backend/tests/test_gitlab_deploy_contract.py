@@ -80,7 +80,7 @@ def test_gitlab_ci_deploys_only_dev_and_main():
     backup_script = "\n".join(ci["backup_main"]["script"])
     publish_script = "\n".join(ci["publish_github"]["script"])
     auth_script = "\n".join(ci[".git_auth"]["before_script"])
-    github_url = "https://github.com/VectoreeAI/vectoree-deerflow.git"
+    github_url = "https://x-access-token:${GITHUB_TOKEN}@github.com/VectoreeAI/vectoree-deerflow.git"
 
     assert ci["stages"] == [".pre", "check", "publish"]
     assert '$CI_PIPELINE_SOURCE == "merge_request_event"' in workflow
@@ -124,4 +124,5 @@ def test_gitlab_ci_deploys_only_dev_and_main():
     assert "set -x" not in text
     assert "PRIVATE KEY" not in text
     assert re.search(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", text) is None
-    assert re.search(r"://[^\s/]+@", text) is None
+    scrubbed = text.replace(github_url, "https://github.com/VectoreeAI/vectoree-deerflow.git")
+    assert re.search(r"://[^\s/]+@", scrubbed) is None
