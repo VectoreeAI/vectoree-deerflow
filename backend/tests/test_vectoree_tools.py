@@ -4,18 +4,19 @@ import json
 
 import pytest
 
-from deerflow.community.vectoree.client import RUN_PATH, VectoreeConfigError, post_json, unwrap_tool_payload
-from deerflow.community.vectoree.tools import web_fetch_tool, web_search_tool
+from deerflow.community.vectoree.client import RUN_PATH, VectoreeConfigError, VectoreeToolError, post_json, unwrap_tool_payload
+from deerflow.community.vectoree.tools import MAX_QUERY_CHARS, web_fetch_tool, web_search_tool
 
 
 class _Response:
-    def __init__(self, payload):
+    def __init__(self, payload, status_code=200, text=""):
         self._payload = payload
-
-    def raise_for_status(self):
-        return None
+        self.status_code = status_code
+        self.text = text
 
     def json(self):
+        if isinstance(self._payload, Exception):
+            raise self._payload
         return self._payload
 
 
@@ -155,3 +156,76 @@ def test_cloud_mode_without_preview_ignores_server_key(monkeypatch):
     monkeypatch.setattr("deerflow.community.vectoree.client.httpx.post", fake_post)
     with pytest.raises(VectoreeConfigError, match="preview"):
         post_json(RUN_PATH, {"action": "search", "query": "x", "max_results": 1})
+
+
+def test_rejected_request_surfaces_vectoree_message(monkeypatch):
+    monkeypatch.setenv("VECTOREE_API_KEY", "sk-ve-v1-test")
+    monkeypatch.delenv("DEPLOY_MODE", raising=False)
+
+    def fake_post(*_args, **_kwargs):
+        return _Response(
+            {"error": "INVALID_INPUT", "message": "Validation error: Invalid url", "statusCode": 400},
+            status_code=400,
+        )
+
+    monkeypatch.setattr("deerflow.community.vectoree.client.httpx.post", fake_post)
+    with pytest.raises(VectoreeToolError, match="400: Validation error: Invalid url") as caught:
+        post_json(RUN_PATH, {"action": "extract", "urls": ["https://example.com"]})
+    assert "sk-ve-v1-test" not in str(caught.value)
+
+
+def test_non_json_error_body_is_truncated(monkeypatch):
+    monkeypatch.setenv("VECTOREE_API_KEY", "sk-ve-v1-test")
+    monkeypatch.delenv("DEPLOY_MODE", raising=False)
+
+    def fake_post(*_args, **_kwargs):
+        return _Response(ValueError("not json"), status_code=502, text="<html>" + "x" * 1000)
+
+    monkeypatch.setattr("deerflow.community.vectoree.client.httpx.post", fake_post)
+    with pytest.raises(VectoreeToolError, match="502: <html>") as caught:
+        post_json(RUN_PATH, {"action": "search", "query": "x", "max_results": 1})
+    assert len(str(caught.value)) < 400
+
+
+def test_search_trims_query_to_vectoree_limit(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("VECTOREE_API_KEY", "sk-ve-v1-test")
+    monkeypatch.delenv("DEPLOY_MODE", raising=False)
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return _Response({"query": json["query"], "results": []})
+
+    monkeypatch.setattr("deerflow.community.vectoree.client.httpx.post", fake_post)
+    monkeypatch.setattr("deerflow.community.vectoree.tools.get_app_config", lambda: SimpleNamespace(get_tool_config=lambda _name: None))
+    web_search_tool.invoke({"query": "  " + "news " * 200, "max_results": 5})
+
+    assert len(captured["json"]["query"]) <= MAX_QUERY_CHARS
+    assert captured["json"]["query"].startswith("news")
+    assert not captured["json"]["query"].endswith(" ")
+
+
+@pytest.mark.parametrize(
+    ("given", "sent"),
+    [
+        ("www.reuters.com/technology", "https://www.reuters.com/technology"),
+        ("  https://example.com/a  ", "https://example.com/a"),
+        ("http://example.com", "http://example.com"),
+        ("//cdn.example.com/x", "https://cdn.example.com/x"),
+    ],
+)
+def test_web_fetch_adds_missing_scheme(monkeypatch, given, sent):
+    monkeypatch.setenv("VECTOREE_API_KEY", "sk-ve-v1-test")
+    monkeypatch.delenv("DEPLOY_MODE", raising=False)
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["json"] = json
+        return _Response({"results": [{"url": json["urls"][0], "raw_content": "body"}]})
+
+    monkeypatch.setattr("deerflow.community.vectoree.client.httpx.post", fake_post)
+    web_fetch_tool.invoke({"url": given})
+
+    assert captured["json"]["urls"] == [sent]

@@ -12,10 +12,15 @@ DEFAULT_ORIGIN = DEFAULT_API_URL
 RUN_PATH = "/api/tools/v1/vectoree.search/run"
 MODELS_PATH = "/api/v1/models"
 _WRAPPER_KEYS = ("output", "data", "result")
+_ERROR_DETAIL_MAX_CHARS = 300
 
 
 class VectoreeConfigError(RuntimeError):
     """Raised when the project API key required to call Vectoree is missing."""
+
+
+class VectoreeToolError(RuntimeError):
+    """Raised when Vectoree rejects a tool call; carries Vectoree's reason so the agent can adjust."""
 
 
 def api_origin() -> str:
@@ -47,11 +52,24 @@ def post_json(path: str, body: dict) -> dict:
         },
         timeout=60,
     )
-    response.raise_for_status()
+    if response.status_code >= 400:
+        raise VectoreeToolError(f"Vectoree returned {response.status_code}: {_error_detail(response)}")
     payload = response.json()
     if isinstance(payload, dict):
         return unwrap_tool_payload(payload)
     return {"data": payload}
+
+
+def _error_detail(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict) and isinstance(body.get("message"), str) and body["message"].strip():
+        detail = body["message"].strip()
+    else:
+        detail = (response.text or "").strip() or "no error detail"
+    return detail[:_ERROR_DETAIL_MAX_CHARS]
 
 
 def unwrap_tool_payload(payload: dict) -> dict:
