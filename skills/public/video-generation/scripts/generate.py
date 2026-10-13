@@ -204,13 +204,51 @@ def _vectoree_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
 
+def _modality_tokens(value) -> set[str]:
+    if isinstance(value, str):
+        token = value.strip().lower()
+        return {token} if token else set()
+    if isinstance(value, list):
+        return {str(item).strip().lower() for item in value if str(item).strip()}
+    return set()
+
+
+def _catalog_entries() -> list:
+    response = requests.get(
+        f"{_vectoree_origin()}/api/v1/models",
+        headers={"Authorization": _vectoree_headers()["Authorization"], "Accept": "application/json"},
+        timeout=20,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    rows = payload
+    if isinstance(payload, dict):
+        rows = next((payload[key] for key in ("data", "models", "items") if isinstance(payload.get(key), list)), [])
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _resolve_vectoree_model(env_name: str, tokens: set[str], label: str) -> str:
+    chosen = os.getenv(env_name, "").strip()
+    if chosen:
+        return chosen
+    try:
+        entries = _catalog_entries()
+    except Exception as exc:
+        raise ValueError(f"No {label} model is available") from exc
+    for entry in entries:
+        output = _modality_tokens(entry.get("outputModality", entry.get("output_modality")))
+        if not output & tokens:
+            continue
+        model_id = entry.get("id") or entry.get("model")
+        if isinstance(model_id, str) and model_id.strip():
+            return model_id.strip()
+    raise ValueError(f"No {label} model is available")
+
+
 def _generate_video_vectoree(prompt: str, output_file: str) -> str:
-    model = os.getenv("VECTOREE_VIDEO_MODEL", "").strip()
-    if not model:
-        raise ValueError(
-            "VECTOREE_VIDEO_MODEL is not set. Choose a video model with "
-            "`npx @vectoree/cli ai models list`."
-        )
+    model = _resolve_vectoree_model("VECTOREE_VIDEO_MODEL", {"video"}, "video")
     origin = _vectoree_origin()
     headers = _vectoree_headers()
     response = requests.post(

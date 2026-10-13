@@ -14,6 +14,7 @@ from app.gateway.auth.session_cookie_state import (
     SESSION_COOKIE_SECURE_STATE_ATTR,
 )
 from app.gateway.csrf_middleware import is_secure_request
+from app.gateway.public_path import cookie_path
 
 ACCESS_TOKEN_COOKIE_NAME = "access_token"
 SESSION_PERSISTENCE_COOKIE_NAME = "deerflow_session_persistent"
@@ -94,6 +95,7 @@ def set_session_cookie(response: Response, request: Request, token: str, *, reme
         secure=policy.secure,
         samesite="lax",
         max_age=policy.max_age,
+        path=cookie_path(),
     )
     response.set_cookie(
         key=SESSION_PERSISTENCE_COOKIE_NAME,
@@ -102,6 +104,7 @@ def set_session_cookie(response: Response, request: Request, token: str, *, reme
         secure=policy.secure,
         samesite="lax",
         max_age=policy.max_age,
+        path=cookie_path(),
     )
     setattr(request.state, SESSION_COOKIE_MAX_AGE_STATE_ATTR, policy.max_age)
     setattr(request.state, SESSION_COOKIE_SECURE_STATE_ATTR, policy.secure)

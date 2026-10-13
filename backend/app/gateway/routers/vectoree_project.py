@@ -1,9 +1,10 @@
 """Internal endpoint that stores Vectoree credentials inside this container."""
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.gateway.authz import _is_internal_caller
+from app.gateway.deps import forbid_in_cloud
 from app.gateway.vectoree_project import publish_vectoree_project
 
 router = APIRouter(prefix="/api/internal/vectoree", tags=["vectoree"])
@@ -26,7 +27,7 @@ class ProjectCredentialsResponse(BaseModel):
     ok: bool
 
 
-@router.post("/project-credentials", response_model=ProjectCredentialsResponse)
+@router.post("/project-credentials", response_model=ProjectCredentialsResponse, dependencies=[Depends(forbid_in_cloud)])
 def save_project_credentials(body: ProjectCredentials, request: Request) -> ProjectCredentialsResponse:
     user = getattr(request.state, "user", None)
     if not _is_internal_caller(request, user):

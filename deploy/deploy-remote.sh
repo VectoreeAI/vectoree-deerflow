@@ -71,12 +71,30 @@ seed_file() {
   echo "[remote] Created $dest from $src"
 }
 
+# Append keys that exist in the template but not in .env yet, so settings added
+# after the first deploy reach existing servers. Existing values are kept.
+merge_new_defaults() {
+  local src="$1" line key
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)= ]] || continue
+    key="${BASH_REMATCH[1]}"
+    if ! grep -qE "^[[:space:]]*${key}=" .env; then
+      printf '%s\n' "$line" >>.env
+      echo "[remote] Added ${key} to .env"
+    fi
+  done <"$src"
+  chmod 600 .env
+}
+
 IN_GATEWAY_IMAGE="${DEERFLOW_GATEWAY_IMAGE:-}"
 IN_FRONTEND_IMAGE="${DEERFLOW_FRONTEND_IMAGE:-}"
 IN_API_URL="${VECTOREE_API_URL:-}"
 IN_DEPLOY_MODE="${DEPLOY_MODE:-}"
+IN_PUBLIC_BASE_PATH="${DEER_FLOW_PUBLIC_BASE_PATH:-}"
 
 seed_file .env deploy/env.example
+merge_new_defaults deploy/env.example
 seed_file config.yaml config.example.yaml
 seed_file extensions_config.json extensions_config.example.json
 mkdir -p skills/public skills/custom
@@ -101,6 +119,10 @@ if [[ -n "$IN_DEPLOY_MODE" ]]; then
       exit 1
       ;;
   esac
+fi
+# The frontend image has this prefix baked in; Gateway must use the same one.
+if [[ -n "$IN_PUBLIC_BASE_PATH" ]]; then
+  upsert_env DEER_FLOW_PUBLIC_BASE_PATH "$IN_PUBLIC_BASE_PATH"
 fi
 
 apply_dotenv DEERFLOW_GATEWAY_IMAGE

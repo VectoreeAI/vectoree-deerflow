@@ -147,6 +147,42 @@ ensure_env_files() {
     ensure_from_example "$PROJECT_ROOT/frontend/.env" "$PROJECT_ROOT/frontend/.env.example" "frontend/.env"
 }
 
+# Compose interpolates DEER_FLOW_INTERNAL_AUTH_TOKEN from this shell, not from
+# ../.env, and `environment:` overrides env_file. Without a shared value the
+# Gateway mints a random token per process and the frontend cannot hand it the
+# Vectoree project key after /link.
+ensure_internal_auth_token() {
+    local token_file="$PROJECT_ROOT/backend/.deer-flow/.internal-auth-token"
+    local line
+
+    if [ -z "${DEER_FLOW_INTERNAL_AUTH_TOKEN:-}" ] && [ -f "$PROJECT_ROOT/.env" ]; then
+        line="$(grep -E '^[[:space:]]*DEER_FLOW_INTERNAL_AUTH_TOKEN=' "$PROJECT_ROOT/.env" | tail -n 1 || true)"
+        DEER_FLOW_INTERNAL_AUTH_TOKEN="${line#*=}"
+        DEER_FLOW_INTERNAL_AUTH_TOKEN="${DEER_FLOW_INTERNAL_AUTH_TOKEN%$'\r'}"
+        DEER_FLOW_INTERNAL_AUTH_TOKEN="${DEER_FLOW_INTERNAL_AUTH_TOKEN%\"}"
+        DEER_FLOW_INTERNAL_AUTH_TOKEN="${DEER_FLOW_INTERNAL_AUTH_TOKEN#\"}"
+    fi
+    if [ -z "${DEER_FLOW_INTERNAL_AUTH_TOKEN:-}" ] && [ -f "$token_file" ]; then
+        DEER_FLOW_INTERNAL_AUTH_TOKEN="$(cat "$token_file")"
+    fi
+    if [ -z "${DEER_FLOW_INTERNAL_AUTH_TOKEN:-}" ]; then
+        if command -v python3 > /dev/null 2>&1; then
+            DEER_FLOW_INTERNAL_AUTH_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+        elif command -v openssl > /dev/null 2>&1; then
+            DEER_FLOW_INTERNAL_AUTH_TOKEN="$(openssl rand -hex 32)"
+        else
+            echo -e "${YELLOW}✗ Cannot generate DEER_FLOW_INTERNAL_AUTH_TOKEN: python3 and openssl are unavailable.${NC}" >&2
+            echo -e "${YELLOW}  Set DEER_FLOW_INTERNAL_AUTH_TOKEN before running make docker-start.${NC}" >&2
+            exit 1
+        fi
+        mkdir -p "$(dirname "$token_file")"
+        echo "$DEER_FLOW_INTERNAL_AUTH_TOKEN" > "$token_file"
+        chmod 600 "$token_file"
+        echo -e "${GREEN}✓ DEER_FLOW_INTERNAL_AUTH_TOKEN generated → $token_file${NC}"
+    fi
+    export DEER_FLOW_INTERNAL_AUTH_TOKEN
+}
+
 load_proxy_env_from_dotenv() {
     local env_file="$PROJECT_ROOT/.env"
     local var
@@ -401,6 +437,7 @@ start() {
 
     ensure_env_files
     load_proxy_env_from_dotenv
+    ensure_internal_auth_token
 
     echo "Building and starting containers..."
     cd "$DOCKER_DIR" && $COMPOSE_CMD up --build -d --remove-orphans $services

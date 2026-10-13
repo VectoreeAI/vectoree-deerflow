@@ -103,7 +103,7 @@ class TestSearchFallbackMiddleware:
         message = ToolMessage(content=_fetch_payload(), tool_call_id="f1", name="web-fetch")
         messages = [
             HumanMessage(content="today AI news"),
-            ToolMessage(content=_search_payload(), tool_call_id="s1", name="web-search"),
+            ToolMessage(content=_search_payload(), tool_call_id="s1", name="vectoree-web-search"),
         ]
         augmented = augment_empty_fetch_message(message, messages)
         assert "Breaking AI news" in augmented.content
@@ -116,12 +116,12 @@ class TestSearchFallbackMiddleware:
         ]
         vectoree_only = augment_empty_fetch_message(vectoree_fetch, historical_search)
         assert "Breaking AI news" not in vectoree_only.content
-        assert "Call `web-search`" in vectoree_only.content
+        assert "Call `vectoree-web-search`" in vectoree_only.content
 
         historical_fetch = ToolMessage(content=_fetch_payload(), tool_call_id="f2", name="web_fetch")
         vectoree_search = [
             HumanMessage(content="today AI news"),
-            ToolMessage(content=_search_payload(), tool_call_id="s2", name="web-search"),
+            ToolMessage(content=_search_payload(), tool_call_id="s2", name="vectoree-web-search"),
         ]
         historical_only = augment_empty_fetch_message(historical_fetch, vectoree_search)
         assert "Breaking AI news" not in historical_only.content

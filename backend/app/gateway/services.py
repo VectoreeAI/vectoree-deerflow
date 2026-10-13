@@ -45,6 +45,8 @@ from deerflow.agents.middlewares.message_utils import _SUMMARY_MESSAGE_NAME, is_
 from deerflow.agents.middlewares.tool_receipt import TOOL_RECEIPT_KEY, TOOL_RECEIPT_LEDGER_KEY
 from deerflow.agents.middlewares.tool_transform_meta import TOOL_TRANSFORMS_KEY
 from deerflow.agents.middlewares.view_image_middleware import _IMAGE_CONTEXT_MESSAGE_MARKER_KEY
+from deerflow.community.vectoree.credentials import RUN_CONTEXT_KEY as VECTOREE_CREDENTIALS_CONTEXT_KEY
+from deerflow.community.vectoree.credentials import bound_credentials as bound_vectoree_credentials
 from deerflow.config.agents_config import load_agent_config
 from deerflow.config.app_config import get_app_config
 from deerflow.config.database_config import resolve_checkpoint_graph_cache_max
@@ -576,6 +578,9 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
             PROJECT_CONTEXT_KEY,
             KNOWLEDGE_SCOPE_KEY,
             KNOWLEDGE_SCOPE_RUNTIME_KEY,
+            # Cloud preview project key, stamped from the request's bound
+            # credentials into ``config['context']`` only (never checkpointed).
+            VECTOREE_CREDENTIALS_CONTEXT_KEY,
         }
     )
     | SANDBOX_SERVER_OWNED_CONTEXT_KEYS
@@ -741,6 +746,9 @@ def inject_authenticated_user_context(
         if isinstance(configurable, dict):
             configurable.pop("user_id", None)
     runtime_context["is_internal"] = auth_source == AUTH_SOURCE_INTERNAL
+    preview_credentials = bound_vectoree_credentials()
+    if preview_credentials is not None:
+        runtime_context[VECTOREE_CREDENTIALS_CONTEXT_KEY] = preview_credentials.to_context()
     if auth_source == AUTH_SOURCE_INTERNAL and request_context is not None:
         channel_user_id = request_context.get("channel_user_id")
         if channel_user_id is not None:
