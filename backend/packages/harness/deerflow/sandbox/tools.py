@@ -2085,6 +2085,34 @@ def _github_env_from_runtime(runtime: Runtime) -> dict[str, str] | None:
     return {"GH_TOKEN": token, "GITHUB_TOKEN": token}
 
 
+_VECTOREE_ENV_COMMAND_RE = re.compile(r"/skills/|VECTOREE_")
+
+
+def _vectoree_env_from_runtime(runtime: Runtime, command: str, *, local: bool) -> dict[str, str] | None:
+    """Expose the run's Vectoree project key to generation skill scripts.
+
+    ``build_sandbox_env`` scrubs every ``*KEY*`` variable from the inherited
+    environment, so the key reaches bash only through this per-call overlay.
+    Cloud runs carry the visitor's preview key in the run context; local runs
+    fall back to the linked project key.
+
+    A non-empty ``env`` moves AIO onto a fresh ``bash.exec`` session, so outside
+    the local sandbox the overlay is limited to commands that run a skill or
+    name a Vectoree variable; other commands keep the persistent shell.
+    """
+    from deerflow.community.vectoree.credentials import RUN_CONTEXT_KEY, VectoreeCredentials, current_credentials
+
+    if not local and not _VECTOREE_ENV_COMMAND_RE.search(command):
+        return None
+    context = runtime.context if runtime.context is not None else None
+    credentials = VectoreeCredentials.from_context(context.get(RUN_CONTEXT_KEY)) if context else None
+    if credentials is None:
+        credentials = current_credentials()
+    if credentials is None:
+        return None
+    return {"VECTOREE_API_KEY": credentials.api_key, "VECTOREE_API_URL": credentials.api_url}
+
+
 _LARK_CLI_COMMAND_RE = re.compile(r"(?<![A-Za-z0-9_.-])lark-cli(?![A-Za-z0-9_.-])")
 
 
@@ -2147,6 +2175,9 @@ def bash_tool(runtime: Runtime, command: str, description: str = "") -> str:
         identity_prefix = _channel_identity_prefix(runtime)
         github_env = _github_env_from_runtime(runtime)
         lark_cli_env = _lark_cli_env_from_runtime(runtime, command, sandbox_paths=not is_local_sandbox(runtime))
+        vectoree_env = _vectoree_env_from_runtime(runtime, command, local=is_local_sandbox(runtime))
+        if vectoree_env:
+            injected_env = {**(injected_env or {}), **vectoree_env}
         if github_env:
             injected_env = {**(injected_env or {}), **github_env}
         if lark_cli_env:

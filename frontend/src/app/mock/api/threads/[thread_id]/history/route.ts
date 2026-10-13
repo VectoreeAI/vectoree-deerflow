@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { withBasePath } from "@/core/config";
 import { DEMO_THREAD_IDS } from "@/core/threads/static-demo";
 
 export async function POST(
@@ -12,7 +13,7 @@ export async function POST(
   }
   const response = await fetch(
     new URL(
-      `/demo/threads/${encodeURIComponent(threadId)}/thread.json`,
+      withBasePath(`/demo/threads/${encodeURIComponent(threadId)}/thread.json`),
       request.nextUrl.origin,
     ),
     { signal: request.signal },

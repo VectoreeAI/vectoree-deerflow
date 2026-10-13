@@ -43,12 +43,12 @@ export async function navigateBrowser(
  */
 export function browserStreamURL(threadId: string, seedUrl?: string): string {
   const base = getBackendBaseURL();
-  const origin =
-    base && base.length > 0
-      ? base
-      : typeof window !== "undefined"
-        ? window.location.origin
-        : "";
+  const pageOrigin =
+    typeof window !== "undefined" ? window.location.origin : "";
+  // A bare base path ("/deerflow") is site-relative; WebSocket needs an origin.
+  const origin = base.startsWith("/")
+    ? `${pageOrigin}${base}`
+    : base || pageOrigin;
   const wsOrigin = origin.replace(/^http/i, "ws");
   const query = new URLSearchParams();
   query.set("frame_format", "binary");

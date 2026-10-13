@@ -1,6 +1,19 @@
-# GitLab CI：合并请求、dev、main 只跑检查。
-# 推送 main 时，先把推送前的 main 并入 main-backup，再把 main 推到 GitHub。
-# 不构建镜像，不登录容器仓库，不连接部署主机。
+# GitLab CI：MR 只测试；push dev 部署测试环境；push main 先备份再部署生产，并把 main 推到 GitHub。
+#
+# 镜像（GitLab Container Registry）：
+#   ${CI_REGISTRY_IMAGE}/gateway:dev|latest
+#   ${CI_REGISTRY_IMAGE}/frontend:dev|latest
+#
+# 服务器上是独立的 compose 项目 /opt/vectoree-deerflow，只 pull 镜像，不在机器上构建。
+# 配置以服务器上的 /opt/vectoree-deerflow/.env 为准。CI 每次只覆盖镜像地址、
+# VECTOREE_API_URL、DEPLOY_MODE=cloud 和 DEER_FLOW_PUBLIC_BASE_PATH；
+# deploy/env.example 里新增的配置项会补进 .env。
+#
+# SSH 变量和 vectoree-starter 用同一套，建议配在 GitLab Group 上：
+#   测试：DEV_DEPLOY_HOST、DEV_DEPLOY_USER、DEV_DEPLOY_SSH_KEY、DEV_DEPLOY_PORT
+#   生产：DEPLOY_HOST、DEPLOY_USER、DEPLOY_SSH_KEY、DEPLOY_PORT
+# 私钥变量是一行 base64（无空白）：base64 < ~/.ssh/你的私钥 | tr -d '\n'
+# 部署目录默认 /opt/vectoree-deerflow，可用 DEV_DEPLOY_PATH / DEPLOY_PATH 覆盖。
 #
 # GitHub 仓库：https://github.com/VectoreeAI/vectoree-deerflow.git
 # 需要 CI 变量 GITHUB_TOKEN（Masked、Protected，环境范围 All）。
@@ -17,9 +30,19 @@ default:
   tags: [docker]
   interruptible: true
 
+variables:
+  DOCKER_BUILDKIT: "1"
+  DEERFLOW_GATEWAY_IMAGE: ${CI_REGISTRY_IMAGE}/gateway:latest
+  DEERFLOW_FRONTEND_IMAGE: ${CI_REGISTRY_IMAGE}/frontend:latest
+  DEERFLOW_GATEWAY_IMAGE_SHA: ${CI_REGISTRY_IMAGE}/gateway:${CI_COMMIT_SHA}
+  DEERFLOW_FRONTEND_IMAGE_SHA: ${CI_REGISTRY_IMAGE}/frontend:${CI_COMMIT_SHA}
+  # 云端站点挂在 https://<公网入口>/deerflow：前端构建时写进 basePath，部署时写进 .env 给 Gateway。
+  DEERFLOW_PUBLIC_BASE_PATH: /deerflow
+
 stages:
   - .pre
   - check
+  - deploy
   - publish
 
 .git_auth:
@@ -94,6 +117,118 @@ test:
     - python -m pip install --disable-pip-version-check pytest pyyaml
     - python -m pytest --noconftest backend/tests/test_gitlab_deploy_contract.py -q
   timeout: 20m
+
+.deploy:
+  stage: deploy
+  image: docker:27
+  timeout: 60m
+  interruptible: false
+  needs:
+    - test
+  before_script:
+    - unset DOCKER_HOST DOCKER_TLS_VERIFY DOCKER_TLS_CERTDIR || true
+    - apk add --no-cache bash openssh-client tar
+    - |
+      set -euo pipefail
+      if [[ "${CI_JOB_NAME:-}" == "deploy_development" ]]; then
+        export DEPLOY_HOST="${DEV_DEPLOY_HOST:-}"
+        export DEPLOY_USER="${DEV_DEPLOY_USER:-}"
+        export DEPLOY_SSH_KEY="${DEV_DEPLOY_SSH_KEY:-}"
+        export DEPLOY_PORT="${DEV_DEPLOY_PORT:-22}"
+        export DEPLOY_PATH="${DEV_DEPLOY_PATH:-/opt/vectoree-deerflow}"
+        export DEPLOY_API_BASE_URL="${DEV_DEPLOY_API_BASE_URL:-https://vectoree.net}"
+      else
+        export DEPLOY_HOST="${DEPLOY_HOST:-}"
+        export DEPLOY_USER="${DEPLOY_USER:-}"
+        export DEPLOY_SSH_KEY="${DEPLOY_SSH_KEY:-}"
+        export DEPLOY_PORT="${DEPLOY_PORT:-22}"
+        export DEPLOY_PATH="${DEPLOY_PATH:-/opt/vectoree-deerflow}"
+        export DEPLOY_API_BASE_URL="${DEPLOY_API_BASE_URL:-https://vectoree.ai}"
+      fi
+      echo "deploy job=${CI_JOB_NAME:-} branch=${CI_COMMIT_BRANCH:-} host=${DEPLOY_HOST:-} path=${DEPLOY_PATH}"
+    - test -n "${DEPLOY_HOST:-}" || (echo "Set DEPLOY_HOST (dev 用 DEV_DEPLOY_HOST)" && exit 1)
+    - test -n "${DEPLOY_USER:-}" || (echo "Set DEPLOY_USER (dev 用 DEV_DEPLOY_USER)" && exit 1)
+    - test -n "${DEPLOY_SSH_KEY:-}" || (echo "Set DEPLOY_SSH_KEY (dev 用 DEV_DEPLOY_SSH_KEY)" && exit 1)
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+  script:
+    - |
+      set -euo pipefail
+      echo "=== Build ${DEERFLOW_GATEWAY_IMAGE} / ${DEERFLOW_FRONTEND_IMAGE} ==="
+      docker build -f backend/Dockerfile \
+        -t "$DEERFLOW_GATEWAY_IMAGE" \
+        -t "$DEERFLOW_GATEWAY_IMAGE_SHA" .
+      docker build -f frontend/Dockerfile --target prod \
+        --build-arg NEXT_PUBLIC_BASE_PATH="$DEERFLOW_PUBLIC_BASE_PATH" \
+        -t "$DEERFLOW_FRONTEND_IMAGE" \
+        -t "$DEERFLOW_FRONTEND_IMAGE_SHA" .
+      docker push "$DEERFLOW_GATEWAY_IMAGE"
+      docker push "$DEERFLOW_GATEWAY_IMAGE_SHA"
+      docker push "$DEERFLOW_FRONTEND_IMAGE"
+      docker push "$DEERFLOW_FRONTEND_IMAGE_SHA"
+    - |
+      set -euo pipefail
+      SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o Port=${DEPLOY_PORT}"
+      mkdir -p ~/.ssh
+      chmod 700 ~/.ssh
+      printf '%s' "$DEPLOY_SSH_KEY" | tr -d '[:space:]' | base64 -d > ~/.ssh/id_ed25519
+      chmod 600 ~/.ssh/id_ed25519
+      SSH="ssh $SSH_OPTS -i ~/.ssh/id_ed25519"
+
+      PULL_REGISTRY_USER="${REGISTRY_PULL_USER:-$CI_REGISTRY_USER}"
+      PULL_REGISTRY_PASSWORD="${REGISTRY_PULL_TOKEN:-$CI_REGISTRY_PASSWORD}"
+
+      # The compose file mounts skills/ and the nginx config from the deploy
+      # directory, so ship them with the scripts. skills/public is replaced;
+      # skills/custom, .env, config.yaml and data volumes stay untouched.
+      $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${DEPLOY_PATH}' && rm -rf '${DEPLOY_PATH}/skills/public'"
+      tar czf - docker-compose.deploy.yml deploy/deploy-remote.sh deploy/env.example \
+        docker/nginx/nginx.conf config.example.yaml extensions_config.example.json skills/public \
+        | $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "tar xzf - -C '${DEPLOY_PATH}'"
+
+      $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" \
+        "DEPLOY_PATH='${DEPLOY_PATH}' DEERFLOW_GATEWAY_IMAGE='${DEERFLOW_GATEWAY_IMAGE}' DEERFLOW_FRONTEND_IMAGE='${DEERFLOW_FRONTEND_IMAGE}' CI_REGISTRY='${CI_REGISTRY}' CI_REGISTRY_USER='${PULL_REGISTRY_USER}' CI_REGISTRY_PASSWORD='${PULL_REGISTRY_PASSWORD}' DEPLOY_API_BASE_URL='${DEPLOY_API_BASE_URL}' DEERFLOW_PUBLIC_BASE_PATH='${DEERFLOW_PUBLIC_BASE_PATH}' bash -s" <<'REMOTE'
+      set -euo pipefail
+      cd "$DEPLOY_PATH"
+      chmod +x deploy/deploy-remote.sh
+
+      echo "=== Login GitLab Container Registry ==="
+      echo "$CI_REGISTRY_PASSWORD" | sudo docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+
+      echo "=== Disk space ==="
+      df -h
+      sudo docker system prune -f || true
+
+      echo "=== Pull images / deploy ==="
+      export DEERFLOW_GATEWAY_IMAGE DEERFLOW_FRONTEND_IMAGE VECTOREE_API_URL="$DEPLOY_API_BASE_URL" DEPLOY_MODE=cloud DEER_FLOW_PUBLIC_BASE_PATH="$DEERFLOW_PUBLIC_BASE_PATH"
+      sudo -E bash "$DEPLOY_PATH/deploy/deploy-remote.sh"
+      echo "=== Done ==="
+      REMOTE
+
+deploy_development:
+  extends: .deploy
+  resource_group: deerflow-development-deploy
+  environment:
+    name: dev
+    url: https://vectoree.net
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+  variables:
+    DEERFLOW_GATEWAY_IMAGE: ${CI_REGISTRY_IMAGE}/gateway:dev
+    DEERFLOW_FRONTEND_IMAGE: ${CI_REGISTRY_IMAGE}/frontend:dev
+    DEERFLOW_GATEWAY_IMAGE_SHA: ${CI_REGISTRY_IMAGE}/gateway:dev-${CI_COMMIT_SHA}
+    DEERFLOW_FRONTEND_IMAGE_SHA: ${CI_REGISTRY_IMAGE}/frontend:dev-${CI_COMMIT_SHA}
+
+deploy_production:
+  extends: .deploy
+  needs:
+    - test
+    - backup_main
+  resource_group: deerflow-production-deploy
+  environment:
+    name: production
+    url: https://vectoree.ai
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
 
 publish_github:
   extends: .git_auth

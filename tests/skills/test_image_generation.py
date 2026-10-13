@@ -470,3 +470,58 @@ def test_vectoree_missing_key_does_not_call_upstream(monkeypatch, tmp_path):
     prompt_file.write_text("a cat", encoding="utf-8")
     with pytest.raises(ValueError, match="VECTOREE_API_KEY"):
         img.generate_image(str(prompt_file), [], str(tmp_path / "o.png"), "1:1")
+
+
+def test_vectoree_image_model_override_skips_catalog(monkeypatch, tmp_path):
+    monkeypatch.setenv("VECTOREE_API_KEY", "sk-ve-v1-test")
+    monkeypatch.setenv("VECTOREE_IMAGE_MODEL", "custom/not-in-catalog")
+    posted = {}
+
+    def fake_get(*_args, **_kwargs):
+        raise AssertionError("catalog must not be called when the model is set")
+
+    def fake_post(url, headers=None, json=None, **kw):
+        posted["json"] = json
+        encoded = base64.b64encode(b"PNG").decode()
+        return FakeResp({"data": [{"b64_json": encoded}]})
+
+    monkeypatch.setattr(img.requests, "get", fake_get)
+    monkeypatch.setattr(img.requests, "post", fake_post)
+    img._generate_image_vectoree("a cat", [], str(tmp_path / "o.png"), "1:1")
+    assert posted["json"]["model"] == "custom/not-in-catalog"
+
+
+def test_vectoree_image_model_comes_from_catalog(monkeypatch, tmp_path):
+    monkeypatch.setenv("VECTOREE_API_KEY", "sk-ve-v1-test")
+    posted = {}
+
+    def fake_get(url, headers=None, **kw):
+        assert url.endswith("/api/v1/models")
+        return FakeResp({"data": [{"id": "provider/image-1", "outputModality": ["image"]}]})
+
+    def fake_post(url, headers=None, json=None, **kw):
+        posted["url"] = url
+        posted["json"] = json
+        encoded = base64.b64encode(b"PNG").decode()
+        return FakeResp({"data": [{"b64_json": encoded}]})
+
+    monkeypatch.setattr(img.requests, "get", fake_get)
+    monkeypatch.setattr(img.requests, "post", fake_post)
+    img._generate_image_vectoree("a cat", [], str(tmp_path / "o.png"), "1:1")
+    assert posted["url"] == "https://vectoree.ai/api/v1/images"
+    assert posted["json"]["model"] == "provider/image-1"
+
+
+def test_vectoree_image_missing_model_does_not_post(monkeypatch, tmp_path):
+    monkeypatch.setenv("VECTOREE_API_KEY", "sk-ve-v1-test")
+
+    def fake_get(*_args, **_kwargs):
+        return FakeResp({"data": [{"id": "provider/text", "outputModality": ["text"]}]})
+
+    def fake_post(*_args, **_kwargs):
+        raise AssertionError("must not call the image API")
+
+    monkeypatch.setattr(img.requests, "get", fake_get)
+    monkeypatch.setattr(img.requests, "post", fake_post)
+    with pytest.raises(ValueError, match="No image model is available"):
+        img._generate_image_vectoree("a cat", [], str(tmp_path / "o.png"), "1:1")

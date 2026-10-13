@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
-import { MODELS_QUERY_KEY } from "@/core/models/hooks";
+import { MODELS_QUERY_KEY, useModels } from "@/core/models/hooks";
 import {
   loadManagedModels,
   modelDraft,
@@ -24,7 +24,6 @@ import {
   testManagedModel,
   type ManagedModel,
 } from "@/core/models/management";
-import { isStaticWebsiteOnly } from "@/core/static-mode";
 
 import { SettingsSection } from "./settings-section";
 
@@ -33,7 +32,7 @@ export function ModelSettingsPage() {
   const { t } = useI18n();
   const text = t.settings.models;
   const client = useQueryClient();
-  const canManage = user?.system_role === "admin" && !isStaticWebsiteOnly();
+  const canManage = user?.system_role === "admin";
   const queryKey = ["managed-models", user?.id];
   const catalog = useQuery({
     queryKey,
@@ -64,10 +63,15 @@ export function ModelSettingsPage() {
   }
   return (
     <SettingsSection title={text.title} description={text.description}>
-      {!canManage ? (
-        <p>{text.adminOnly}</p>
-      ) : (
-        <div className="space-y-4">
+      <BuiltInModels />
+      {canManage && (
+        <div className="mt-8 space-y-4 border-t pt-6">
+          <div>
+            <h3 className="font-medium">{text.manageTitle}</h3>
+            <p className="text-muted-foreground text-sm">
+              {text.manageDescription}
+            </p>
+          </div>
           <div className="flex gap-2">
             <Button disabled={pending} onClick={() => setEditing("new")}>
               {text.add}
@@ -139,6 +143,54 @@ export function ModelSettingsPage() {
         </div>
       )}
     </SettingsSection>
+  );
+}
+
+function BuiltInModels() {
+  const { t } = useI18n();
+  const text = t.settings.models;
+  const { models, isLoading, error } = useModels();
+  if (isLoading) return <p role="status">{text.loading}</p>;
+  if (error) return <p role="alert">{text.failed}</p>;
+  if (models.length === 0) return <p>{text.noModels}</p>;
+  const groups = [
+    {
+      title: text.textModels,
+      models: models.filter((m) => !m.supports_vision),
+    },
+    {
+      title: text.visionModels,
+      models: models.filter((m) => m.supports_vision),
+    },
+  ];
+  return (
+    <div className="space-y-6">
+      {groups.map(
+        (group) =>
+          group.models.length > 0 && (
+            <section key={group.title} aria-label={group.title}>
+              <h3 className="mb-2 text-sm font-medium">
+                {group.title}
+                <span className="text-muted-foreground ms-2">
+                  {group.models.length}
+                </span>
+              </h3>
+              <ul className="divide-y rounded-lg border">
+                {group.models.map((model) => (
+                  <li key={model.name} className="px-4 py-2.5">
+                    <p className="text-sm font-medium">
+                      {model.display_name || model.name}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {model.model}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ),
+      )}
+    </div>
   );
 }
 
