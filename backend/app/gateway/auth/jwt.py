@@ -16,15 +16,17 @@ class TokenPayload(BaseModel):
     exp: datetime
     iat: datetime | None = None
     ver: int = 0  # token_version — must match User.token_version
+    vp: str = ""  # Vectoree project of a cloud preview session; empty for local sessions
 
 
-def create_access_token(user_id: str, expires_delta: timedelta | None = None, token_version: int = 0) -> str:
+def create_access_token(user_id: str, expires_delta: timedelta | None = None, token_version: int = 0, vectoree_project_id: str = "") -> str:
     """Create a JWT access token.
 
     Args:
         user_id: The user's UUID as string
         expires_delta: Optional custom expiry, defaults to 7 days
         token_version: User's current token_version for invalidation
+        vectoree_project_id: Cloud preview project, written as the ``vp`` claim
 
     Returns:
         Encoded JWT string
@@ -34,6 +36,8 @@ def create_access_token(user_id: str, expires_delta: timedelta | None = None, to
 
     now = datetime.now(UTC)
     payload = {"sub": user_id, "exp": now + expiry, "iat": now, "ver": token_version}
+    if vectoree_project_id:
+        payload["vp"] = vectoree_project_id
     return jwt.encode(payload, config.jwt_secret, algorithm="HS256")
 
 

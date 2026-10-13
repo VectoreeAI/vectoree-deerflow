@@ -20,6 +20,7 @@ from langgraph_sdk import Auth
 
 from app.gateway.auth.errors import TokenError
 from app.gateway.auth.jwt import decode_token
+from app.gateway.auth.preview_session import user_matches_preview
 from app.gateway.auth_disabled import AUTH_DISABLED_USER_ID, is_auth_disabled
 from app.gateway.deps import get_local_provider
 
@@ -102,6 +103,11 @@ async def authenticate(request):
         raise Auth.exceptions.HTTPException(
             status_code=401,
             detail="Token revoked (password changed)",
+        )
+    if not user_matches_preview(user, token_project=payload.vp):
+        raise Auth.exceptions.HTTPException(
+            status_code=401,
+            detail="Session belongs to another Vectoree preview",
         )
 
     return payload.sub

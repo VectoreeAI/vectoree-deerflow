@@ -349,14 +349,47 @@ def _vectoree_api_key() -> str:
     return key
 
 
-def _require_vectoree_model(env_name: str, modality: str) -> str:
-    model = os.getenv(env_name, "").strip()
-    if not model:
-        raise ValueError(
-            f"{env_name} is not set. Choose a {modality} model with "
-            "`npx @vectoree/cli ai models list`."
-        )
-    return model
+def _modality_tokens(value) -> set[str]:
+    if isinstance(value, str):
+        token = value.strip().lower()
+        return {token} if token else set()
+    if isinstance(value, list):
+        return {str(item).strip().lower() for item in value if str(item).strip()}
+    return set()
+
+
+def _catalog_entries() -> list:
+    response = requests.get(
+        f"{_vectoree_origin()}/api/v1/models",
+        headers={"Authorization": f"Bearer {_vectoree_api_key()}", "Accept": "application/json"},
+        timeout=20,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    rows = payload
+    if isinstance(payload, dict):
+        rows = next((payload[key] for key in ("data", "models", "items") if isinstance(payload.get(key), list)), [])
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _resolve_vectoree_model(env_name: str, tokens: set[str], label: str) -> str:
+    chosen = os.getenv(env_name, "").strip()
+    if chosen:
+        return chosen
+    try:
+        entries = _catalog_entries()
+    except Exception as exc:
+        raise ValueError(f"No {label} model is available") from exc
+    for entry in entries:
+        output = _modality_tokens(entry.get("outputModality", entry.get("output_modality")))
+        if not output & tokens:
+            continue
+        model_id = entry.get("id") or entry.get("model")
+        if isinstance(model_id, str) and model_id.strip():
+            return model_id.strip()
+    raise ValueError(f"No {label} model is available")
 
 
 def _generate_image_vectoree(
@@ -365,7 +398,7 @@ def _generate_image_vectoree(
     if reference_images:
         raise ValueError("Vectoree image generation in this skill does not accept reference images")
     key = _vectoree_api_key()
-    model = _require_vectoree_model("VECTOREE_IMAGE_MODEL", "image")
+    model = _resolve_vectoree_model("VECTOREE_IMAGE_MODEL", {"image"}, "image")
     url = f"{_vectoree_origin()}/api/v1/images"
     response = requests.post(
         url,

@@ -1,6 +1,8 @@
 import type { ThreadState } from "@langchain/langgraph-sdk";
 import type { ThreadsClient } from "@langchain/langgraph-sdk/client";
 
+import { withBasePath } from "@/core/config";
+
 import type { AgentThread, AgentThreadState } from "./types";
 
 export const DEMO_THREAD_IDS = [
@@ -124,7 +126,7 @@ export function resolveStaticDemoArtifact(
 
   const artifactPath = segments.slice(1).join("/");
   if (!allowedArtifacts.has(artifactPath)) return null;
-  return `/demo/threads/${threadId}/${artifactPath}`;
+  return withBasePath(`/demo/threads/${threadId}/${artifactPath}`);
 }
 
 const DEMO_THREAD_ID_SET = new Set<string>(DEMO_THREAD_IDS);
@@ -172,7 +174,7 @@ export async function loadStaticDemoThread(
   threadId: string,
 ): Promise<AgentThread> {
   const response = await globalThis.fetch(
-    `/demo/threads/${encodeURIComponent(threadId)}/thread.json`,
+    withBasePath(`/demo/threads/${encodeURIComponent(threadId)}/thread.json`),
   );
   if (!response.ok) {
     throw new Error(`Failed to load demo thread ${threadId}`);

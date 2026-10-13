@@ -28,6 +28,9 @@ from deerflow.persistence.base import Base
 # so 0018_oauth_identity_pg_partial.py keeps its own literal by
 # convention (consistent with every other revision in that package).
 OAUTH_IDENTITY_INDEX_NAME = "idx_users_oauth_identity"
+# Cloud previews serve many Vectoree projects from one database, so an email is
+# unique per project. Local accounts keep vectoree_project_id = "".
+PROJECT_EMAIL_INDEX_NAME = "uq_users_project_email"
 
 
 class UserPreferenceRow(Base):
@@ -45,7 +48,8 @@ class UserRow(Base):
     # UUIDs are stored as 36-char strings for cross-backend portability.
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
 
-    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    vectoree_project_id: Mapped[str] = mapped_column(String(64), nullable=False, default="", server_default="")
     password_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     # "admin" | "user" — kept as plain string to avoid ALTER TABLE pain
@@ -93,4 +97,5 @@ class UserRow(Base):
             sqlite_where=text("oauth_provider IS NOT NULL AND oauth_id IS NOT NULL"),
             postgresql_where=text("oauth_provider IS NOT NULL AND oauth_id IS NOT NULL"),
         ),
+        Index(PROJECT_EMAIL_INDEX_NAME, "vectoree_project_id", "email", unique=True),
     )

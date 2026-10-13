@@ -1,3 +1,5 @@
+import { withBasePath } from "@/core/config";
+
 import catalog from "./builtin.demo.json";
 import type { CapabilityInstallation } from "./types";
 
@@ -22,7 +24,7 @@ export async function staticCapabilityInstallations(
       { status: 404 },
     );
   const response = await globalThis.fetch(
-    new URL(`/mock/api/${path}`, origin).href,
+    new URL(withBasePath(`/mock/api/${path}`), origin).href,
     { ...init, method: "GET" },
   );
   if (!response.ok)

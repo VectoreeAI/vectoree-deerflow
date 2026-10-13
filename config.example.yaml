@@ -840,8 +840,8 @@ tools:
 
   # Web search via Vectoree Tool Hub. Requires VECTOREE_API_KEY (project key).
   # The model-visible name must not be web_search: Vectoree chat completions
-  # intercept that name and never return a client tool call.
-  - name: web-search
+  # intercept that exact name and never return a client tool call.
+  - name: vectoree-web-search
     group: web
     use: deerflow.community.vectoree.tools:web_search_tool
     max_results: 5

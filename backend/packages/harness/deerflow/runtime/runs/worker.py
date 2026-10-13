@@ -797,6 +797,24 @@ async def _await_task_stop_after_host_cancellation(
             deferred = _defer_finalization_interrupt(deferred, exc)
 
 
+def _bind_run_vectoree_credentials(config: dict) -> None:
+    """Bind the cloud preview key the Gateway stamped into ``config['context']``.
+
+    ``run_agent`` always runs as its own asyncio task, so the binding lives in
+    that task's context copy and is discarded with it; child tasks and
+    ``copy_context()`` executors inherit it. Without a stamped key the ambient
+    binding (if any) is left untouched.
+    """
+    from deerflow.community.vectoree.credentials import RUN_CONTEXT_KEY, VectoreeCredentials, set_credentials
+
+    runtime_context = config.get("context")
+    if not isinstance(runtime_context, dict):
+        return
+    credentials = VectoreeCredentials.from_context(runtime_context.get(RUN_CONTEXT_KEY))
+    if credentials is not None:
+        set_credentials(credentials)
+
+
 async def run_agent(
     bridge: StreamBridge,
     run_manager: RunManager,
@@ -824,6 +842,7 @@ async def run_agent(
 
     run_id = record.run_id
     thread_id = record.thread_id
+    _bind_run_vectoree_credentials(config)
 
     from deerflow_extension_api import ExtensionData, TaskInfo
 

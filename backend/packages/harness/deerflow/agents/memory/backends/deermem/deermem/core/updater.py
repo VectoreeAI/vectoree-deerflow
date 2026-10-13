@@ -3,6 +3,7 @@
 import asyncio
 import atexit
 import concurrent.futures
+import contextvars
 import copy
 import html
 import json
@@ -1886,6 +1887,7 @@ class MemoryUpdater:
         if loop is not None and loop.is_running():
             try:
                 future = _SYNC_MEMORY_UPDATER_EXECUTOR.submit(
+                    contextvars.copy_context().run,
                     self._do_update_memory_sync,
                     messages=messages,
                     thread_id=thread_id,

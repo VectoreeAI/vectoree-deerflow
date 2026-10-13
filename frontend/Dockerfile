@@ -37,6 +37,10 @@ RUN cd /app/frontend && pnpm install --frozen-lockfile
 # and the frontend falls back to package.json's version.
 ARG APP_VERSION=""
 ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
+# Public URL prefix, e.g. /deerflow for the cloud deployment. Next.js bakes it
+# into the build, so it is a build argument rather than a runtime setting.
+ARG NEXT_PUBLIC_BASE_PATH=""
+ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
 RUN cd /app/frontend && SKIP_ENV_VALIDATION=1 pnpm build
 
 # ── Prod: minimal runtime with pre-built output ───────────────────────────────
@@ -51,5 +55,8 @@ RUN pnpm config set store-dir ${PNPM_STORE_PATH}
 RUN if [ -n "${NPM_REGISTRY}" ]; then pnpm config set registry "${NPM_REGISTRY}"; fi
 WORKDIR /app
 COPY --from=builder /app/frontend ./frontend
+# `next start` reloads next.config.js; its basePath must match the build.
+ARG NEXT_PUBLIC_BASE_PATH=""
+ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
 EXPOSE 3000
 CMD ["sh", "-c", "cd /app/frontend && pnpm start"]

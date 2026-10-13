@@ -9,7 +9,7 @@ description: Multi-step deep research after an initial web_search or when the us
 
 This skill provides a systematic methodology for conducting thorough web research. **Start with the available web search tool for the user's topic, then load this skill when depth is required** — especially before content generation that needs multi-angle sources.
 
-**Tool names:** Call whichever search and page-fetch tools are actually in your tool list. The default Vectoree install exposes `web-search` and `web-fetch`. Other providers still expose `web_search` and `web_fetch`. Do not call a name that is not bound.
+**Tool names:** Call whichever search and page-fetch tools are actually in your tool list. The default Vectoree install exposes `vectoree-web-search` and `web-fetch`. Other providers still expose `web_search` and `web_fetch`. Do not call a name that is not bound.
 
 ## When to Use This Skill
 
