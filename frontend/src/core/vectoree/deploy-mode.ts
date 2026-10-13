@@ -1,7 +1,5 @@
 export type DeployMode = "local" | "cloud";
 
-type DeployModeEnv = Readonly<Record<string, string | undefined>>;
-
 export class DeployModeError extends Error {
   readonly status: 404 | 500;
 
@@ -12,15 +10,20 @@ export class DeployModeError extends Error {
   }
 }
 
-export function readDeployMode(env: DeployModeEnv = process.env): DeployMode {
+export function readDeployMode(
+  env: NodeJS.ProcessEnv = process.env,
+): DeployMode {
   const raw = env.DEPLOY_MODE?.trim().toLowerCase() ?? "";
   if (raw === "" || raw === "local") return "local";
   if (raw === "cloud") return "cloud";
   throw new DeployModeError("DEPLOY_MODE must be local or cloud", 500);
 }
 
-export function rejectCloudLink(env: DeployModeEnv = process.env): void {
+export function rejectCloudLink(env: NodeJS.ProcessEnv = process.env): void {
   if (readDeployMode(env) === "cloud") {
-    throw new DeployModeError("Link is not used when DEPLOY_MODE=cloud", 404);
+    throw new DeployModeError(
+      "Link is not used when DEPLOY_MODE=cloud",
+      404,
+    );
   }
 }

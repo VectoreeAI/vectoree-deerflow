@@ -236,58 +236,16 @@ def text_to_speech_minimax(
     return None
 
 
-def _modality_tokens(value) -> set[str]:
-    if isinstance(value, str):
-        token = value.strip().lower()
-        return {token} if token else set()
-    if isinstance(value, list):
-        return {str(item).strip().lower() for item in value if str(item).strip()}
-    return set()
-
-
-def _catalog_entries() -> list:
-    origin = os.getenv("VECTOREE_API_URL", "https://vectoree.ai").rstrip("/")
-    key = os.getenv("VECTOREE_API_KEY", "").strip()
-    response = requests.get(
-        f"{origin}/api/v1/models",
-        headers={"Authorization": f"Bearer {key}", "Accept": "application/json"},
-        timeout=20,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    rows = payload
-    if isinstance(payload, dict):
-        rows = next((payload[key_name] for key_name in ("data", "models", "items") if isinstance(payload.get(key_name), list)), [])
-    if not isinstance(rows, list):
-        return []
-    return [row for row in rows if isinstance(row, dict)]
-
-
-def _resolve_vectoree_model(env_name: str, tokens: set[str], label: str) -> str:
-    chosen = os.getenv(env_name, "").strip()
-    if chosen:
-        return chosen
-    try:
-        entries = _catalog_entries()
-    except Exception as exc:
-        raise ValueError(f"No {label} model is available") from exc
-    for entry in entries:
-        output = _modality_tokens(entry.get("outputModality", entry.get("output_modality")))
-        if not output & tokens:
-            continue
-        model_id = entry.get("id") or entry.get("model")
-        if isinstance(model_id, str) and model_id.strip():
-            return model_id.strip()
-    raise ValueError(f"No {label} model is available")
-
-
 def text_to_speech_vectoree(text: str) -> bytes | None:
     """Convert text to speech using the Vectoree model gateway."""
     key = os.getenv("VECTOREE_API_KEY", "").strip()
     if not key:
         logger.error("VECTOREE_API_KEY is not set")
         return None
-    model = _resolve_vectoree_model("VECTOREE_SPEECH_MODEL", {"audio", "speech"}, "speech")
+    model = os.getenv("VECTOREE_SPEECH_MODEL", "").strip()
+    if not model:
+        logger.error("VECTOREE_SPEECH_MODEL is not set")
+        return None
     origin = os.getenv("VECTOREE_API_URL", "https://vectoree.ai").rstrip("/")
     voice = os.getenv("VECTOREE_SPEECH_VOICE", "alloy")
     try:

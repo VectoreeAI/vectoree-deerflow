@@ -16,8 +16,6 @@ from typing import Any, Literal
 
 import httpx
 
-from deerflow.community.vectoree.credentials import bound_credentials, is_cloud_mode
-
 _DEFAULT_API_URL = "https://vectoree.ai"
 _ENV_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 _OTP = re.compile(r"^\d{8}$")
@@ -47,17 +45,8 @@ class AuthProxyResult:
 
 
 def resolve_vectoree_link(env: Mapping[str, str] | None = None) -> VectoreeLink | None:
-    """Return the project link when a non-empty project key is available.
-
-    The cloud preview bound to the current request wins. In cloud mode there is
-    no other source: the server's own key and link files are never used.
-    """
+    """Return the project link when a non-empty project key is available."""
     source = env if env is not None else os.environ
-    credentials = bound_credentials()
-    if credentials is not None:
-        return VectoreeLink(api_url=credentials.api_url, api_key=credentials.api_key)
-    if is_cloud_mode(source):
-        return None
     for root in _candidate_roots(source):
         file_env = _read_env_file(root / ".env")
         config = _read_config(root / ".vectoree" / "config.json")
@@ -148,17 +137,9 @@ def _interpret_auth(action: str, status: int, data: Any) -> AuthProxyResult:
         return AuthProxyResult(kind="error", http_status=401, message="Incorrect email or password")
     if action == "verify":
         return AuthProxyResult(kind="error", http_status=400, message="Invalid verification code")
-    if status == 409 or (isinstance(data, dict) and data.get("error") == "AUTH_EMAIL_EXISTS"):
+    if status in {400, 409}:
         return AuthProxyResult(kind="error", http_status=400, message="Email already registered")
-    # A 400 carries Vectoree's user-facing reason, e.g. the project's password rules.
-    return AuthProxyResult(kind="error", http_status=400, message=_public_message(data) or "Could not create the account")
-
-
-def _public_message(data: Any) -> str:
-    message = data.get("message") if isinstance(data, dict) else None
-    if not isinstance(message, str):
-        return ""
-    return message.strip()[:300]
+    return AuthProxyResult(kind="error", http_status=400, message="Could not create the account")
 
 
 def _needs_email_verification(status: int, data: Any) -> bool:

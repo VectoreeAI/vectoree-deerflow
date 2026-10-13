@@ -19,7 +19,6 @@ class User(BaseModel):
 
     id: UUID = Field(default_factory=uuid4, description="Primary key")
     email: EmailStr = Field(..., description="Unique email address")
-    vectoree_project_id: str = Field(default="", description="Vectoree project for cloud preview users; empty for local accounts")
     password_hash: str | None = Field(None, description="bcrypt hash, nullable for OAuth users")
     system_role: Literal["admin", "user"] = Field(default="user")
     created_at: datetime = Field(default_factory=_utc_now)

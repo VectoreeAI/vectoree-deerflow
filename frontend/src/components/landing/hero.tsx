@@ -9,13 +9,8 @@ import { useEffect, useRef, useState } from "react";
 import { AuroraText } from "@/components/ui/aurora-text";
 import { Button } from "@/components/ui/button";
 import { FlickeringGrid } from "@/components/ui/flickering-grid";
-import { withBasePath } from "@/core/config";
 import { useRenderActivity } from "@/core/dom/render-activity";
-import {
-  needsLinkPage,
-  previewExpiredPath,
-  readLinkGate,
-} from "@/core/vectoree/project-linked";
+import { needsLinkPage, readLinkGate } from "@/core/vectoree/project-linked";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
@@ -47,19 +42,11 @@ export function Hero({ className }: { className?: string }) {
     if (starting) return;
     setStarting(true);
     try {
-      const gate = await readLinkGate();
-      const expired = previewExpiredPath(gate);
-      if (expired) {
-        router.push(expired);
-        return;
-      }
-      if (needsLinkPage(gate)) {
+      if (needsLinkPage(await readLinkGate())) {
         router.push("/link");
         return;
       }
-      const me = await fetch(withBasePath("/api/v1/auth/me"), {
-        credentials: "include",
-      });
+      const me = await fetch("/api/v1/auth/me", { credentials: "include" });
       router.push(me.ok ? "/workspace" : "/login?next=/workspace");
     } catch {
       router.push("/link");

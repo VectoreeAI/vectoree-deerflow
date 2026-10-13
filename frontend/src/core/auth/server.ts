@@ -8,8 +8,6 @@ import { getGatewayConfig } from "./gateway-config";
 import { STATIC_WEBSITE_USER } from "./static-user";
 import { type AuthResult, userSchema } from "./types";
 
-const PREVIEW_COOKIE = "deerflow_preview";
-
 /**
  * Fetch the authenticated user from the gateway using the request's cookies.
  * Returns a tagged AuthResult — callers use exhaustive switch, no try/catch.
@@ -31,8 +29,6 @@ export async function getServerSideUser(): Promise<AuthResult> {
 
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("access_token");
-  // Cloud mode only accepts a session under the preview that issued it.
-  const previewCookie = cookieStore.get(PREVIEW_COOKIE);
 
   let internalGatewayUrl: string;
   try {
@@ -75,11 +71,7 @@ export async function getServerSideUser(): Promise<AuthResult> {
 
   try {
     const res = await fetch(`${internalGatewayUrl}/api/v1/auth/me`, {
-      headers: {
-        Cookie: previewCookie
-          ? `access_token=${sessionCookie.value}; ${PREVIEW_COOKIE}=${previewCookie.value}`
-          : `access_token=${sessionCookie.value}`,
-      },
+      headers: { Cookie: `access_token=${sessionCookie.value}` },
       cache: "no-store",
       signal: controller.signal,
     });

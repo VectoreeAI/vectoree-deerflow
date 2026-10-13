@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 # Tool names whose results are attacker-influenceable remote content. The
 # first-party search/fetch providers normalize to ``web_fetch`` /
 # ``web_search`` / ``image_search`` (see community/*/tools.py). The default
-# Vectoree tools use ``web-fetch`` / ``vectoree-web-search`` instead,
+# Vectoree tools use ``web-fetch`` / ``web-search`` instead,
 # so both name pairs are remote content. ``web_capture`` (Browserless screenshot) additionally
 # surfaces the target site's response-status text (``X-Response-Status``, a
 # free-form reason phrase controlled by whatever server is being captured) into
@@ -62,7 +62,6 @@ _REMOTE_CONTENT_TOOL_NAMES: frozenset[str] = frozenset(
         "web_search",
         "web-fetch",
         "web-search",
-        "vectoree-web-search",
         "image_search",
         "web_capture",
     }

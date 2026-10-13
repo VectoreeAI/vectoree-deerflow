@@ -17,7 +17,6 @@ from starlette.types import ASGIApp
 from app.gateway.auth.config import get_auth_config
 from app.gateway.auth.session_cookie_state import SESSION_COOKIE_ISSUED_STATE_ATTR, SESSION_COOKIE_MAX_AGE_STATE_ATTR, SESSION_COOKIE_SECURE_STATE_ATTR, SKIP_AUTH_CSRF_COOKIE_STATE_ATTR
 from app.gateway.auth_disabled import is_auth_disabled
-from app.gateway.public_path import cookie_path
 from app.gateway.request_path import get_request_route_path
 from deerflow.trace_context import TRACE_ID_HEADER
 
@@ -71,8 +70,6 @@ _AUTH_EXEMPT_PATHS: frozenset[str] = frozenset(
         "/api/v1/auth/vectoree/verify",
         "/api/v1/auth/vectoree/resend",
         "/api/v1/auth/vectoree/methods",
-        "/api/v1/auth/vectoree/register/code",
-        "/api/v1/auth/vectoree/register/complete",
     }
 )
 
@@ -279,7 +276,6 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 # access_token survives — leaving the user "logged in" but unable to make
                 # any state-changing request (403 "CSRF token missing").
                 max_age=max_age,
-                path=cookie_path(),
             )
 
         return response
