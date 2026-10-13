@@ -70,8 +70,8 @@ config.yaml.bak
 # Monocle agent-observability trace output (local file exporter)
 .monocle/
 
-# prompts
-prompts/
+# Personal prompt notes at the repo root only; package prompt files must stay tracked
+/prompts/
 
 # vectoree
 .vectoree/
