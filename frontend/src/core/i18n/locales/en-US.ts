@@ -1281,13 +1281,10 @@ export const enUS: Translations = {
     description: "Adjust how DeerFlow looks and behaves for you.",
     models: {
       title: "Models",
-      description: "Models built into this server. Pick any of them in chat.",
-      textModels: "Language models",
-      visionModels: "Vision language models",
-      noModels: "No models available.",
-      manageTitle: "Manage shared models",
-      manageDescription:
-        "Add models for everyone. Models from the server configuration are read-only.",
+      description:
+        "Manage shared models available to users. Models from the server configuration are read-only.",
+      adminOnly:
+        "Only administrators can manage shared models. This feature is unavailable in demos.",
       add: "Add model",
       loading: "Loading models…",
       failed: "Could not complete the request.",
@@ -1850,7 +1847,6 @@ export const enUS: Translations = {
     pleaseWait: "Please wait...",
     signIn: "Sign In",
     createAccount: "Create Account",
-    register: "Register",
     createAdminAccount: "Create admin account",
     adminSetupRequiredTitle: "Administrator setup is required",
     adminSetupRequiredDescription:
@@ -1871,15 +1867,6 @@ export const enUS: Translations = {
     verificationTitle: "Enter the 8-digit code sent to your email.",
     verificationCode: "Verification code",
     resendCode: "Resend code",
-    passwordLogin: "Password",
-    emailCodeLogin: "Email code",
-    confirmPassword: "Confirm password",
-    sendCode: "Send code",
-    resendCodeIn: (seconds: number) => `Resend in ${seconds}s`,
-    codeSent: "A verification code was sent to your email.",
-    passwordMismatch: "Passwords do not match",
-    sendCodeFirst: "Send the verification code first",
-    registerSuccess: "Account created. Please sign in.",
     errors: {
       sso_failed: "SSO login failed. Please try again or use email login.",
       sso_cancelled: "SSO login was cancelled.",
@@ -1887,18 +1874,6 @@ export const enUS: Translations = {
         "An account with this email already exists. Please sign in with your password or contact your administrator.",
       sso_not_allowed:
         "SSO login is not allowed for your account. Contact your administrator.",
-      google_failed:
-        "Google login failed. Please try again or use email login.",
-      google_not_configured:
-        "The linked Vectoree project has no Google login configured. Add a Google Client ID and Secret under Authentication → Auth methods in the Vectoree console.",
     },
-  },
-  previewExpired: {
-    title: "This preview has expired",
-    description:
-      "This DeerFlow preview link is no longer valid. Open the preview again from the Vectoree console.",
-    unavailableTitle: "Preview temporarily unavailable",
-    unavailableDescription:
-      "We couldn't reach Vectoree to start this preview. Try again from the Vectoree console in a moment.",
   },
 };

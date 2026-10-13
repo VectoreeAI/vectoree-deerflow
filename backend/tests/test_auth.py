@@ -636,13 +636,12 @@ def test_is_email_violation_matches_both_backends():
     import sqlite3
     from types import SimpleNamespace
 
-    from app.gateway.auth.repositories.sqlite import _EMAIL_UNIQUE_INDEX_NAMES, _is_email_violation
+    from app.gateway.auth.repositories.sqlite import _EMAIL_UNIQUE_INDEX_NAME, _is_email_violation
 
-    # Postgres reports the unique index name; pre-0027 databases use
-    # ix_users_email, later ones the per-project uq_users_project_email.
-    assert _EMAIL_UNIQUE_INDEX_NAMES == {"ix_users_email", "uq_users_project_email"}
-    for name in _EMAIL_UNIQUE_INDEX_NAMES:
-        assert _is_email_violation(_pg_integrity_error(name)) is True
+    # email is unique=True + index=True -> a single UNIQUE INDEX, so Postgres
+    # reports the index name (ix_users_email), not a users_email_key constraint.
+    assert _EMAIL_UNIQUE_INDEX_NAME == "ix_users_email"
+    assert _is_email_violation(_pg_integrity_error(_EMAIL_UNIQUE_INDEX_NAME)) is True
     sqlite = SimpleNamespace(orig=sqlite3.IntegrityError("UNIQUE constraint failed: users.email"))
     assert _is_email_violation(sqlite) is True
 

@@ -169,7 +169,7 @@ def _describe_tool_call(tool_call: dict[str, Any], todos: list[Todo]) -> list[di
             }
         ]
 
-    if name in {"web_search", "web-search", "vectoree-web-search", "image_search"}:
+    if name in {"web_search", "web-search", "image_search"}:
         query = _string_arg(args.get("query"))
         return [
             {

@@ -36,12 +36,6 @@ def _default_route_authorization_config(monkeypatch):
         "/api/v1/auth/vectoree/verify",
         "/api/v1/auth/vectoree/resend",
         "/api/v1/auth/vectoree/methods",
-        "/api/v1/auth/vectoree/register/code",
-        "/api/v1/auth/vectoree/register/complete",
-        "/api/v1/auth/vectoree/google/start",
-        "/api/v1/auth/vectoree/google/callback",
-        "/api/v1/preview/enter",
-        "/api/v1/preview/status",
     ],
 )
 def test_public_paths(path: str):

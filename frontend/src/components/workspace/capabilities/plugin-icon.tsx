@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import { withBasePath } from "@/core/config";
 import { safePluginIcon } from "@/core/mcp/icon";
 import { cn } from "@/lib/utils";
 
@@ -60,7 +59,7 @@ export function PluginIcon({
         {/* Inline PNGs and local brand assets need no image optimization request. */}
         <img
           key={src}
-          src={withBasePath(src)}
+          src={src}
           alt=""
           data-plugin-icon={name}
           width={32}

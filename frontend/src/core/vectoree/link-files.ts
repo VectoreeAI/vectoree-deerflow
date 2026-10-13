@@ -84,7 +84,8 @@ export function resolveWritableRepoRoot(
   const insideContainer = isInside(start, containerRoot);
   const candidate = configured
     ? path.resolve(configured)
-    : (discovered ?? (insideContainer ? path.resolve(containerRoot) : null));
+    : (discovered ??
+      (insideContainer ? path.resolve(containerRoot) : null));
   // Host `pnpm dev` finds the repository by config.example.yaml.
   // The Docker image has no repository checkout; /app is the project
   // directory in the container and the process can write there directly.
@@ -109,9 +110,7 @@ export function readPublicLinkStatus(root: string): PublicLinkStatus {
   const status: PublicLinkStatus = { linked: true };
   const projectName = file.projectName?.trim();
   if (projectName) status.projectName = projectName;
-  const apiUrl = (
-    [file.apiUrl, disk.VECTOREE_API_URL].find(Boolean) ?? ""
-  ).trim();
+  const apiUrl = (file.apiUrl || disk.VECTOREE_API_URL || "").trim();
   if (apiUrl) status.apiUrl = apiUrl;
   return status;
 }

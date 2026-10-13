@@ -14,7 +14,6 @@ from app.gateway.config import get_gateway_config
 from app.gateway.csrf_middleware import CORS_EXPOSED_HEADERS, CSRFMiddleware, get_configured_cors_origins
 from app.gateway.deps import langgraph_runtime
 from app.gateway.health import READINESS_CHECKPOINTER_CONFIG_ATTR, readiness_payload
-from app.gateway.preview_middleware import PreviewMiddleware
 from app.gateway.routers import (
     agents,
     artifacts,
@@ -35,7 +34,6 @@ from app.gateway.routers import (
     mcp_tasks,
     memory,
     models,
-    preview,
     project_documents,
     project_thread_files,
     projects,
@@ -53,7 +51,6 @@ from app.gateway.routers import (
     vectoree_project,
 )
 from app.gateway.trace_middleware import TraceMiddleware
-from deerflow.community.vectoree.credentials import is_cloud_mode
 from deerflow.config import app_config as deerflow_app_config
 from deerflow.logging_config import DEFAULT_LOG_DATE_FORMAT, DEFAULT_LOG_FORMAT, configure_logging
 from deerflow.tracing.monocle import setup_monocle_tracing_if_enabled
@@ -345,13 +342,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         raise RuntimeError(error_msg) from e
     config = get_gateway_config()
     logger.info(f"Starting API Gateway on {config.host}:{config.port}")
-
-    if is_cloud_mode():
-        from app.gateway.preview_store import get_preview_store
-
-        # Fail fast: cloud mode cannot serve visitors without the preview store.
-        get_preview_store()
-        logger.info("Cloud preview mode enabled")
 
     from deerflow.skills.projection import ensure_public_skill_projection
 
@@ -807,10 +797,6 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     # Auth: reject unauthenticated requests to non-public paths (fail-closed safety net)
     app.add_middleware(AuthMiddleware)
 
-    # Cloud preview: bind the visitor's Vectoree project key before auth runs,
-    # so session checks can compare the token's project with the preview's.
-    app.add_middleware(PreviewMiddleware)
-
     # Give contributed routers a neutral way to ask "is this caller an admin"
     # without importing app.gateway.deps, which would pin them to an
     # unpublished internal layer and defeat independent distribution. The
@@ -838,7 +824,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
         # require_admin, mirroring deps.is_admin_user's PAT guard.
         auth_source = getattr(request.state, "auth_source", None)
         is_pat = auth_source == AUTH_SOURCE_PAT
-        is_admin = system_role == "admin" and not is_pat and not is_cloud_mode()
+        is_admin = system_role == "admin" and not is_pat
         roles = () if is_pat and system_role == "admin" else (system_role,) if isinstance(system_role, str) and system_role else ()
         return ExtensionPrincipal(
             user_id=str(user.id),
@@ -998,7 +984,6 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Auth API is mounted at /api/v1/auth
     app.include_router(auth.router)
-    app.include_router(preview.router)
     app.include_router(user_preferences.router)
 
     # Feedback API is mounted at /api/threads/{thread_id}/runs/{run_id}/feedback

@@ -33,15 +33,12 @@ from app.gateway.auth.oidc_state import (
     set_state_cookie,
 )
 from app.gateway.auth.pat import PAT_MAX_NAME_LENGTH
-from app.gateway.auth.preview_session import current_preview_project
 from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME, SESSION_PERSISTENCE_COOKIE_NAME, set_session_cookie
 from app.gateway.auth.session_cookie_state import SKIP_AUTH_CSRF_COOKIE_STATE_ATTR
 from app.gateway.auth.user_provisioning import get_or_provision_oidc_user
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, _request_origin, auth_csrf_cookie_settings, generate_csrf_token, is_secure_request
-from app.gateway.deps import forbid_in_cloud, get_current_user_from_request, get_local_provider
-from app.gateway.public_path import cookie_path, public_base_path, public_path
+from app.gateway.deps import get_current_user_from_request, get_local_provider
 from app.gateway.vectoree_auth import proxy_vectoree_auth, resolve_vectoree_link
-from deerflow.community.vectoree.credentials import is_cloud_mode
 from deerflow.config.auth_config import OIDCProviderConfig
 
 logger = logging.getLogger(__name__)
@@ -406,32 +403,23 @@ async def _upsert_vectoree_user(email: str):
 
     The Vectoree password is not stored. A random hash keeps local password
     login from accepting that same password if the project is later unlinked.
-
-    In cloud mode the account belongs to the current preview's project, so the
-    same email in two projects is two users, and nobody becomes admin.
     """
     provider = get_local_provider()
-    project_id = current_preview_project() if is_cloud_mode() else ""
-    if is_cloud_mode() and not project_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"code": "preview_required", "message": "Open DeerFlow from the Vectoree console Preview button."})
-    existing = await provider.get_user_by_email(email, vectoree_project_id=project_id)
+    existing = await provider.get_user_by_email(email)
     if existing is not None:
         return existing
-    if project_id:
-        role = "user"
-    else:
-        role = "admin" if await provider.count_admin_users() == 0 else "user"
+    role = "admin" if await provider.count_admin_users() == 0 else "user"
     try:
-        return await provider.create_user(email=email, password=secrets.token_urlsafe(32), system_role=role, needs_setup=False, vectoree_project_id=project_id)
+        return await provider.create_user(email=email, password=secrets.token_urlsafe(32), system_role=role, needs_setup=False)
     except ValueError:
-        existing = await provider.get_user_by_email(email, vectoree_project_id=project_id)
+        existing = await provider.get_user_by_email(email)
         if existing is not None:
             return existing
         raise
 
 
 def _issue_session(user, request: Request, response: Response, remember_me: bool) -> str:
-    token = create_access_token(str(user.id), token_version=user.token_version, vectoree_project_id=getattr(user, "vectoree_project_id", ""))
+    token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request, remember_me=remember_me)
     return token
 
@@ -602,69 +590,6 @@ class VectoreeResendRequest(BaseModel):
     email: EmailStr
 
 
-class VectoreeRegisterCodeRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(..., min_length=1)
-
-
-class VectoreeRegisterCompleteRequest(BaseModel):
-    email: EmailStr
-    otp: str = Field(..., min_length=8, max_length=8)
-
-
-def _require_vectoree_link():
-    link = resolve_vectoree_link()
-    if link is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=AuthErrorResponse(code=AuthErrorCode.INVALID_CREDENTIALS, message="Link a Vectoree project first").model_dump(),
-        )
-    return link
-
-
-@router.post("/vectoree/register/code")
-async def vectoree_register_code(body: VectoreeRegisterCodeRequest):
-    """Create an unverified Vectoree account and email its code. Never signs in.
-
-    Vectoree only sends a verification code to an existing account, so the
-    account is created here with the chosen password. Repeating the call with
-    the same password resends the code.
-    """
-    link = _require_vectoree_link()
-    try:
-        result = await proxy_vectoree_auth(link, "register", {"email": body.email, "password": body.password})
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    if result.kind == "verify":
-        return {"code_sent": True}
-    if result.kind == "session" and result.email:
-        # The project does not require email verification; the account exists now.
-        await _upsert_vectoree_user(result.email)
-        return {"code_sent": False, "created": True}
-    code = AuthErrorCode.EMAIL_ALREADY_EXISTS if result.message == "Email already registered" else AuthErrorCode.INVALID_CREDENTIALS
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=AuthErrorResponse(code=code, message=result.message or "Could not create the account").model_dump(),
-    )
-
-
-@router.post("/vectoree/register/complete")
-async def vectoree_register_complete(body: VectoreeRegisterCompleteRequest):
-    """Confirm the registration code. The user signs in afterwards on the login page."""
-    link = _require_vectoree_link()
-    try:
-        result = await proxy_vectoree_auth(link, "verify", {"email": body.email, "otp": body.otp})
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    if result.kind != "session" or not result.email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=AuthErrorResponse(code=AuthErrorCode.INVALID_CREDENTIALS, message=result.message or "Invalid verification code").model_dump(),
-        )
-    await _upsert_vectoree_user(result.email)
-    return {"created": True}
-
-
 @router.post("/vectoree/verify", response_model=LoginResponse)
 async def vectoree_verify(request: Request, response: Response, body: VectoreeVerifyRequest):
     """Confirm a Vectoree email code and issue a DeerFlow session."""
@@ -702,9 +627,9 @@ async def vectoree_methods():
 async def logout(request: Request, response: Response):
     """Logout current user by clearing the cookie."""
     is_https = is_secure_request(request)
-    response.delete_cookie(key=ACCESS_TOKEN_COOKIE_NAME, secure=is_https, samesite="lax", path=cookie_path())
-    response.delete_cookie(key=CSRF_COOKIE_NAME, secure=is_https, samesite="strict", path=cookie_path())
-    response.delete_cookie(key=SESSION_PERSISTENCE_COOKIE_NAME, secure=is_https, samesite="lax", path=cookie_path())
+    response.delete_cookie(key=ACCESS_TOKEN_COOKIE_NAME, secure=is_https, samesite="lax")
+    response.delete_cookie(key=CSRF_COOKIE_NAME, secure=is_https, samesite="strict")
+    response.delete_cookie(key=SESSION_PERSISTENCE_COOKIE_NAME, secure=is_https, samesite="lax")
     setattr(request.state, SKIP_AUTH_CSRF_COOKIE_STATE_ATTR, True)
     return MessageResponse(message="Successfully logged out")
 
@@ -938,12 +863,8 @@ async def setup_status(request: Request):
     """Check if an admin account exists. Returns needs_setup=True when no admin exists.
 
     A linked Vectoree project skips the first-admin gate so the first Vectoree
-    account can become the DeerFlow admin. Cloud mode has no admin and is
-    linked exactly while the visitor's preview is live.
+    account can become the DeerFlow admin.
     """
-    if is_cloud_mode():
-        linked = resolve_vectoree_link() is not None
-        return {"needs_setup": False, "registration_enabled": linked, "vectoree_linked": linked, "deploy_mode": "cloud"}
     if resolve_vectoree_link() is not None:
         return {"needs_setup": False, "registration_enabled": True, "vectoree_linked": True}
 
@@ -1011,7 +932,7 @@ class InitializeAdminRequest(BaseModel):
     _strong_password = field_validator("password")(classmethod(lambda cls, v: _validate_strong_password(v)))
 
 
-@router.post("/initialize", response_model=UserResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(forbid_in_cloud)])
+@router.post("/initialize", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def initialize_admin(request: Request, response: Response, body: InitializeAdminRequest):
     """Create the first admin account on initial system setup.
 
@@ -1081,7 +1002,6 @@ def _set_csrf_cookie(response: Response, request: Request) -> None:
         # so the double-submit pair is evicted together, never leaving a logged-in
         # session whose csrf_token was dropped (e.g. iOS Safari PWA termination).
         max_age=max_age,
-        path=cookie_path(),
     )
 
 
@@ -1101,7 +1021,7 @@ def _resolve_oidc_redirect_uri(request: Request, provider_id: str, provider_conf
     origin = _request_origin(request)
     if not origin:
         origin = f"{request.url.scheme}://{request.headers.get('host', 'localhost:8001')}"
-    return f"{origin}{public_path(f'/api/v1/auth/callback/{provider_id}')}"
+    return f"{origin}/api/v1/auth/callback/{provider_id}"
 
 
 @router.get("/providers")
@@ -1129,22 +1049,6 @@ async def list_auth_providers():
             }
         )
     return {"providers": providers}
-
-
-@router.get("/vectoree/google/start")
-async def vectoree_google_start(request: Request, next: str | None = None, remember_me: bool = True):  # noqa: A002
-    """Start Vectoree Google login. Requires a linked project key."""
-    from app.gateway.vectoree_google import start_google_login
-
-    return await start_google_login(request, next, remember_me)
-
-
-@router.get("/vectoree/google/callback")
-async def vectoree_google_callback(request: Request, vectoree_code: str | None = None, error: str | None = None):
-    """Finish Vectoree Google login and issue a DeerFlow session."""
-    from app.gateway.vectoree_google import finish_google_login
-
-    return await finish_google_login(request, vectoree_code, error)
 
 
 @router.get("/oauth/{provider}")
@@ -1329,7 +1233,7 @@ async def oauth_callback(
 
     # Revalidate as defense-in-depth if future state writers populate this target.
     redirect_target = validate_next_param(state_payload.next_path) or "/workspace"
-    frontend_base = oidc_config.frontend_base_url or public_base_path()
+    frontend_base = oidc_config.frontend_base_url or ""
     callback_redirect = f"{frontend_base}/auth/callback?next={urllib.parse.quote(redirect_target)}"
 
     redirect_response = RedirectResponse(url=callback_redirect, status_code=status.HTTP_302_FOUND)
@@ -1348,7 +1252,7 @@ async def oauth_callback(
 
 def _build_error_redirect(frontend_base_url: str | None, error_code: str) -> str:
     """Build a frontend redirect URL with an error parameter."""
-    base = frontend_base_url or public_base_path()
+    base = frontend_base_url or ""
     return f"{base}/login?error={error_code}"
 
 

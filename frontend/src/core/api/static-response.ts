@@ -2,7 +2,7 @@ import {
   staticCapabilityCatalog,
   staticCapabilityInstallations,
 } from "@/core/capabilities/static";
-import { getBackendBaseURL, withBasePath } from "@/core/config";
+import { getBackendBaseURL } from "@/core/config";
 import type { FeaturesResponse } from "@/core/features/api";
 import type { UserMemory } from "@/core/memory/types";
 
@@ -59,10 +59,7 @@ export async function staticApiResponse(
   }
   // These routes already own the demo settings data; do not maintain a second copy.
   if (["skills", "mcp/config", "integrations/lark/status"].includes(path)) {
-    return globalThis.fetch(
-      new URL(withBasePath(`/mock/api/${path}`), origin).href,
-      init,
-    );
+    return globalThis.fetch(new URL(`/mock/api/${path}`, origin).href, init);
   }
 
   let data: unknown;

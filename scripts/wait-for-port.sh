@@ -52,9 +52,7 @@ is_port_listening() {
     fi
 
     if command -v netstat >/dev/null 2>&1; then
-        # On macOS `netstat -l` omits listeners and shows TIME_WAIT sockets, so
-        # read all sockets and keep only LISTEN rows.
-        if netstat -an 2>/dev/null | awk '$NF == "LISTEN" {print $4}' | grep -Eq "(^|[.:])${PORT}$"; then
+        if netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|[.:])${PORT}$"; then
             return 0
         fi
     fi
