@@ -13,6 +13,7 @@ class _Response:
         self._payload = payload
         self.status_code = status_code
         self.text = text
+        self.headers = {}
 
     def json(self):
         if isinstance(self._payload, Exception):
@@ -185,6 +186,30 @@ def test_non_json_error_body_is_truncated(monkeypatch):
     with pytest.raises(VectoreeToolError, match="502: <html>") as caught:
         post_json(RUN_PATH, {"action": "search", "query": "x", "max_results": 1})
     assert len(str(caught.value)) < 400
+
+
+def test_empty_error_body_logs_responder_headers(monkeypatch, caplog):
+    import logging
+
+    monkeypatch.setenv("VECTOREE_API_KEY", "sk-ve-v1-test")
+    monkeypatch.delenv("DEPLOY_MODE", raising=False)
+
+    def fake_post(*_args, **_kwargs):
+        response = _Response(ValueError("empty"), status_code=400, text="")
+        response.headers = {"server": "cloudflare", "cf-ray": "abc123-HKG", "content-type": "text/plain"}
+        return response
+
+    monkeypatch.setattr("deerflow.community.vectoree.client.httpx.post", fake_post)
+    with caplog.at_level(logging.WARNING, logger="deerflow.community.vectoree.client"):
+        with pytest.raises(VectoreeToolError, match="400: empty response body"):
+            post_json(RUN_PATH, {"action": "search", "query": "x", "max_results": 1})
+
+    logged = caplog.text
+    assert "status=400" in logged
+    assert "server=cloudflare" in logged
+    assert "cf-ray=abc123-HKG" in logged
+    assert RUN_PATH in logged
+    assert "sk-ve-v1-test" not in logged
 
 
 def test_search_trims_query_to_vectoree_limit(monkeypatch):
