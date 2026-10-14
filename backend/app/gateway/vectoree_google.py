@@ -119,18 +119,22 @@ async def _exchange_email(link: VectoreeLink, code: str, verifier: str) -> str |
                     "Content-Type": "application/json",
                 },
             )
-    except httpx.HTTPError:
-        return None
-    if response.status_code >= 400:
+    except httpx.HTTPError as exc:
+        logger.warning("Vectoree Google login exchange failed: %s", exc)
         return None
     try:
         data = response.json()
     except ValueError:
+        data = None
+    if response.status_code >= 400:
+        code = data.get("error") if isinstance(data, dict) else None
+        logger.warning("Vectoree Google login exchange returned %s %s", response.status_code, code)
         return None
     user = data.get("user") if isinstance(data, dict) else None
     email = user.get("email") if isinstance(user, dict) else None
     if isinstance(email, str) and email.strip():
         return email.strip()
+    logger.warning("Vectoree Google login exchange returned no email")
     return None
 
 
@@ -165,12 +169,24 @@ async def start_google_login(request: Request, next_path: str | None, remember_m
     return response
 
 
-async def finish_google_login(request: Request, vectoree_code: str | None, error: str | None) -> RedirectResponse:
+async def finish_google_login(
+    request: Request,
+    vectoree_code: str | None,
+    error: str | None,
+    error_code: str | None = None,
+) -> RedirectResponse:
     if error or not vectoree_code:
+        logger.warning("Vectoree Google login rejected: error_code=%s error=%s", error_code, error)
+        if error_code == "AUTH_EMAIL_EXISTS":
+            return _failure(request, "google_email_exists")
         return _failure(request)
     state = _read_state(request)
     link = resolve_vectoree_link()
     if state is None or link is None:
+        logger.warning(
+            "Vectoree Google login callback missing %s",
+            "login state cookie" if state is None else "linked project",
+        )
         return _failure(request)
     email = await _exchange_email(link, vectoree_code, state.code_verifier)
     if not email:

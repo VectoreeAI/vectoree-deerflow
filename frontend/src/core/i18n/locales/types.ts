@@ -1521,6 +1521,7 @@ export interface Translations {
       sso_not_allowed: string;
       google_failed: string;
       google_not_configured: string;
+      google_email_exists: string;
     };
   };
   previewExpired: {

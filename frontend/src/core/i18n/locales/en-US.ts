@@ -1891,6 +1891,8 @@ export const enUS: Translations = {
         "Google login failed. Please try again or use email login.",
       google_not_configured:
         "The linked Vectoree project has no Google login configured. Add a Google Client ID and Secret under Authentication → Auth methods in the Vectoree console.",
+      google_email_exists:
+        "This email is already registered with a password. Please sign in with your email and password.",
     },
   },
   previewExpired: {

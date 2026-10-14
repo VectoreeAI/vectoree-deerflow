@@ -122,6 +122,42 @@ def test_google_cancel_or_missing_email_does_not_issue_session(client):
     assert "ve-access-token-secret" not in missing.headers.get("set-cookie", "")
 
 
+def test_google_login_with_registered_email_explains_why(client, caplog):
+    import logging
+
+    _start(client)
+    with caplog.at_level(logging.WARNING, logger="app.gateway.vectoree_google"):
+        rejected = client.get(
+            "/api/v1/auth/vectoree/google/callback",
+            params={
+                "error": "This email is already registered.",
+                "error_code": "AUTH_EMAIL_EXISTS",
+            },
+            follow_redirects=False,
+        )
+    assert rejected.status_code == 302
+    assert rejected.headers["location"].endswith("/login?error=google_email_exists")
+    assert "access_token=" not in rejected.headers.get("set-cookie", "")
+    assert "AUTH_EMAIL_EXISTS" in caplog.text
+
+
+def test_google_callback_failures_are_logged(client, caplog):
+    import logging
+
+    _start(client)
+    _Client.payload = {"user": {}, "accessToken": "ve-access-token-secret"}
+    with caplog.at_level(logging.WARNING, logger="app.gateway.vectoree_google"):
+        missing = client.get(
+            "/api/v1/auth/vectoree/google/callback",
+            params={"vectoree_code": "code-3"},
+            follow_redirects=False,
+        )
+    assert missing.headers["location"].endswith("/login?error=google_failed")
+    assert "Vectoree Google login" in caplog.text
+    assert "ve-access-token-secret" not in caplog.text
+    assert "code-3" not in caplog.text
+
+
 def test_google_start_sends_unconfigured_project_back_to_login(client):
     _Client.start = (
         400,

@@ -1140,11 +1140,16 @@ async def vectoree_google_start(request: Request, next: str | None = None, remem
 
 
 @router.get("/vectoree/google/callback")
-async def vectoree_google_callback(request: Request, vectoree_code: str | None = None, error: str | None = None):
+async def vectoree_google_callback(
+    request: Request,
+    vectoree_code: str | None = None,
+    error: str | None = None,
+    error_code: str | None = None,
+):
     """Finish Vectoree Google login and issue a DeerFlow session."""
     from app.gateway.vectoree_google import finish_google_login
 
-    return await finish_google_login(request, vectoree_code, error)
+    return await finish_google_login(request, vectoree_code, error, error_code)
 
 
 @router.get("/oauth/{provider}")

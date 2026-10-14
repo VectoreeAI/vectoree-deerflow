@@ -1778,6 +1778,7 @@ export const zhCN: Translations = {
       google_failed: "Google 登录失败，请重试或使用邮箱登录。",
       google_not_configured:
         "关联的 Vectoree 项目还没有配置 Google 登录。请在 Vectoree 控制台的 Authentication → Auth methods 中填写 Google Client ID 和 Secret。",
+      google_email_exists: "该邮箱已用邮箱密码注册过，请使用邮箱登录。",
     },
   },
   previewExpired: {
