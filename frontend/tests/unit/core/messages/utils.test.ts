@@ -1762,6 +1762,83 @@ describe("orphan tool messages", () => {
     expect(t2?.type).toBe("tool");
   });
 
+  test("late tool result returns to the processing group that issued its call", () => {
+    const messages = [
+      { id: "h-1", type: "human", content: "AI news today" },
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          { id: "call-ok", name: "vectoree-web-search", args: {} },
+          { id: "call-bad", name: "web-fetch", args: {} },
+        ],
+      },
+      {
+        id: "t-ok",
+        type: "tool",
+        name: "vectoree-web-search",
+        tool_call_id: "call-ok",
+        content: "results",
+      },
+      { id: "ai-2", type: "ai", content: "Here is the news." },
+      {
+        id: "t-bad",
+        type: "tool",
+        name: "web-fetch",
+        tool_call_id: "call-bad",
+        content: "Error: Tool 'web-fetch' failed with VectoreeToolError",
+      },
+    ] as Message[];
+
+    const groups = getMessageGroups(messages);
+
+    expect(groups.map((g) => g.type)).toEqual([
+      "human",
+      "assistant:processing",
+      "assistant",
+    ]);
+    expect(groups[1]?.messages.map((m) => m.id)).toEqual([
+      "ai-1",
+      "t-ok",
+      "t-bad",
+    ]);
+    expect(groups[2]?.messages.map((m) => m.id)).toEqual(["ai-2"]);
+  });
+
+  test("late tool result with an unknown call joins the nearest processing group", () => {
+    const messages = [
+      { id: "h-1", type: "human", content: "Run something" },
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        tool_calls: [{ id: "call-1", name: "bash", args: {} }],
+      },
+      {
+        id: "t-1",
+        type: "tool",
+        name: "bash",
+        tool_call_id: "call-1",
+        content: "output-1",
+      },
+      { id: "ai-2", type: "ai", content: "Done." },
+      {
+        id: "t-2",
+        type: "tool",
+        name: "bash",
+        tool_call_id: "call-unknown",
+        content: "output-2",
+      },
+    ] as Message[];
+
+    const groups = getMessageGroups(messages);
+
+    expect(groups[2]?.type).toBe("assistant");
+    expect(groups[2]?.messages.some((m) => m.type === "tool")).toBe(false);
+    expect(groups[1]?.messages.map((m) => m.id)).toContain("t-2");
+  });
+
   test("opens a processing group for a leading orphan tool message", () => {
     // History pagination cuts by event seq, not turn boundaries, so the first
     // loaded page can begin mid-turn with tool results whose AI tool-call

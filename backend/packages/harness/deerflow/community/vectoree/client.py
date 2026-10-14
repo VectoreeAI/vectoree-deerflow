@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 import httpx
 
 from deerflow.community.vectoree.credentials import DEFAULT_API_URL, current_credentials, is_cloud_mode, normalize_api_url
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_ORIGIN = DEFAULT_API_URL
 RUN_PATH = "/api/tools/v1/vectoree.search/run"
@@ -53,7 +56,17 @@ def post_json(path: str, body: dict) -> dict:
         timeout=60,
     )
     if response.status_code >= 400:
-        raise VectoreeToolError(f"Vectoree returned {response.status_code}: {_error_detail(response)}")
+        detail = _error_detail(response)
+        logger.warning(
+            "Vectoree tool call failed: path=%s status=%s server=%s cf-ray=%s content-type=%s detail=%s",
+            path,
+            response.status_code,
+            response.headers.get("server", ""),
+            response.headers.get("cf-ray", ""),
+            response.headers.get("content-type", ""),
+            detail,
+        )
+        raise VectoreeToolError(f"Vectoree returned {response.status_code}: {detail}")
     payload = response.json()
     if isinstance(payload, dict):
         return unwrap_tool_payload(payload)
@@ -68,7 +81,7 @@ def _error_detail(response: httpx.Response) -> str:
     if isinstance(body, dict) and isinstance(body.get("message"), str) and body["message"].strip():
         detail = body["message"].strip()
     else:
-        detail = (response.text or "").strip() or "no error detail"
+        detail = (response.text or "").strip() or "empty response body"
     return detail[:_ERROR_DETAIL_MAX_CHARS]
 
 
