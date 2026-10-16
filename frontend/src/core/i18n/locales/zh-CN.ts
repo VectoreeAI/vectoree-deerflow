@@ -1769,7 +1769,6 @@ export const zhCN: Translations = {
     passwordMismatch: "两次输入的密码不一致",
     sendCodeFirst: "请先发送验证码",
     registerSuccess: "账号创建成功，请登录。",
-    accountNotRegistered: "这个邮箱还没有注册，请先注册。",
     walletActivateBefore: "组织钱包尚未充值。请前往",
     walletActivateLink: "组织账单",
     walletActivateAfter: "充值后再试。",

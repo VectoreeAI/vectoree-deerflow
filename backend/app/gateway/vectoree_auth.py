@@ -48,8 +48,6 @@ class AuthProxyResult:
 
 
 WALLET_NOT_ACTIVATED = "billing_wallet_not_activated"
-ACCOUNT_NOT_REGISTERED = "account_not_registered"
-_VECTOREE_ACCOUNT_NOT_REGISTERED = "AUTH_ACCOUNT_NOT_REGISTERED"
 
 
 def wallet_billing_url(api_url: str) -> str:
@@ -145,13 +143,6 @@ async def proxy_vectoree_auth(link: VectoreeLink, action: str, body: Mapping[str
             message="Organization wallet is not activated",
             code=WALLET_NOT_ACTIVATED,
         )
-    if action == "resend" and _is_account_not_registered(response.status_code, data):
-        return AuthProxyResult(
-            kind="error",
-            http_status=404,
-            message="This account is not registered. Please sign up.",
-            code=ACCOUNT_NOT_REGISTERED,
-        )
     if action == "resend":
         if response.status_code >= 400:
             return AuthProxyResult(kind="error", http_status=response.status_code, message="Could not resend the code")
@@ -177,17 +168,6 @@ def _interpret_auth(action: str, status: int, data: Any) -> AuthProxyResult:
         return AuthProxyResult(kind="error", http_status=400, message="Email already registered")
     # A 400 carries Vectoree's user-facing reason, e.g. the project's password rules.
     return AuthProxyResult(kind="error", http_status=400, message=_public_message(data) or "Could not create the account")
-
-
-def _is_account_not_registered(status: int, data: Any) -> bool:
-    """Vectoree returns 404 when an app verification email has no account."""
-    if status != 404:
-        return False
-    record = data if isinstance(data, dict) else {}
-    code = record.get("error") if isinstance(record.get("error"), str) else ""
-    if not code and isinstance(record.get("code"), str):
-        code = record["code"]
-    return code == _VECTOREE_ACCOUNT_NOT_REGISTERED
 
 
 def _is_wallet_inactive(status: int, data: Any) -> bool:

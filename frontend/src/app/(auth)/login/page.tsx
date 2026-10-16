@@ -30,16 +30,6 @@ import {
   readLinkGate,
 } from "@/core/vectoree/project-linked";
 
-function isUnregisteredAccount(data: unknown): boolean {
-  if (typeof data !== "object" || data === null) return false;
-  const record = data as Record<string, unknown>;
-  const detail =
-    typeof record.detail === "object" && record.detail !== null
-      ? (record.detail as Record<string, unknown>)
-      : record;
-  return detail.code === "account_not_registered";
-}
-
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -107,10 +97,6 @@ export default function LoginPage() {
       return;
     }
     setWalletBillingUrl("");
-    if (isUnregisteredAccount(data)) {
-      setError(t.login.accountNotRegistered);
-      return;
-    }
     setError(parseAuthError(data).message || t.login.networkError);
   };
 
