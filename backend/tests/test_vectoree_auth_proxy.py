@@ -118,6 +118,17 @@ async def test_proxy_login_hides_vectoree_tokens(monkeypatch, status_code, paylo
             {"message": "Organization wallet is not activated"},
             "",
         ),
+        (
+            "resend",
+            {"email": "a@example.com"},
+            404,
+            {
+                "error": "AUTH_ACCOUNT_NOT_REGISTERED",
+                "message": "This account is not registered. Please sign up.",
+                "statusCode": 404,
+            },
+            "account_not_registered",
+        ),
     ],
 )
 async def test_proxy_reports_an_inactive_wallet_only_on_402(monkeypatch, action, body, status_code, payload, code):
@@ -142,8 +153,11 @@ async def test_proxy_reports_an_inactive_wallet_only_on_402(monkeypatch, action,
     result = await proxy_vectoree_auth(VectoreeLink(api_url="https://vectoree.ai", api_key="sk-ve-v1-test"), action, body)
 
     assert result.code == code
-    if code:
+    if code == "billing_wallet_not_activated":
         assert result.http_status == 402
         assert result.message == "Organization wallet is not activated"
+    elif code == "account_not_registered":
+        assert result.http_status == 404
+        assert result.message == "This account is not registered. Please sign up."
     else:
         assert result.message == "Could not resend the code"

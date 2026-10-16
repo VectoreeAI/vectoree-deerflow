@@ -204,4 +204,62 @@ describe("Vectoree email code login", () => {
     expect(screen.queryByText("Organization wallet is not activated")).toBeNull();
     expect(screen.queryByText("钱包未激活")).toBeNull();
   });
+
+  it("asks an unknown email to sign up before sending a code", async () => {
+    mockGateway({
+      "/vectoree/resend": {
+        ok: false,
+        body: {
+          detail: {
+            code: "account_not_registered",
+            message: "This account is not registered. Please sign up.",
+          },
+        },
+      },
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Email code" }));
+    type("Email", "new@example.com");
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+
+    expect(
+      await screen.findByText("This email is not registered. Please sign up first."),
+    ).toBeTruthy();
+    expect(screen.queryByText("A verification code was sent to your email.")).toBeNull();
+  });
+});
+
+describe("Vectoree registration wallet", () => {
+  it("links an unfunded wallet to organization billing", async () => {
+    mockGateway({
+      "/vectoree/register/code": {
+        ok: false,
+        body: {
+          detail: {
+            code: "billing_wallet_not_activated",
+            message: "Organization wallet is not activated",
+            billing_url: "https://vectoree.ai/dashboard/organization/billing",
+          },
+        },
+      },
+    });
+    renderPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Don't have an account? Sign up",
+      }),
+    );
+    type("Email", "new@example.com");
+    type("Password", "password123");
+    type("Confirm password", "password123");
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+
+    const link = await screen.findByRole("link", { name: "organization billing" });
+    expect(link.getAttribute("href")).toBe(
+      "https://vectoree.ai/dashboard/organization/billing",
+    );
+    expect(screen.queryByText("A verification code was sent to your email.")).toBeNull();
+  });
 });
