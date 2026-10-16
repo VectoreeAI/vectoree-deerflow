@@ -1511,6 +1511,7 @@ export interface Translations {
     sendCode: string;
     resendCodeIn: (seconds: number) => string;
     codeSent: string;
+    codeSentIfRegistered: string;
     passwordMismatch: string;
     sendCodeFirst: string;
     registerSuccess: string;

@@ -160,7 +160,9 @@ describe("Vectoree email code login", () => {
     type("Email", "ada@example.com");
     fireEvent.click(screen.getByRole("button", { name: "Send code" }));
     expect(
-      await screen.findByText("A verification code was sent to your email."),
+      await screen.findByText(
+        "If your email is registered, we have sent you a verification code. Please check your inbox.",
+      ),
     ).toBeTruthy();
 
     type("Verification code", "87654321");
