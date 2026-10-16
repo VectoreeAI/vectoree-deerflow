@@ -279,7 +279,9 @@ export default function LoginPage() {
       }
       setCodeSent(true);
       setCooldown(60);
-      setNotice(t.login.codeSent);
+      setNotice(
+        vectoreeRegister ? t.login.codeSent : t.login.codeSentIfRegistered,
+      );
     } catch {
       setError(t.login.networkError);
     } finally {
