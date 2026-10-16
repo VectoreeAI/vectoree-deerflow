@@ -1766,8 +1766,6 @@ export const zhCN: Translations = {
     sendCode: "发送验证码",
     resendCodeIn: (seconds: number) => `${seconds} 秒后重发`,
     codeSent: "验证码已发送到你的邮箱。",
-    codeSentIfRegistered:
-      "如果该邮箱已经注册，我们已向你发送验证码。请查看收件箱。",
     passwordMismatch: "两次输入的密码不一致",
     sendCodeFirst: "请先发送验证码",
     registerSuccess: "账号创建成功，请登录。",

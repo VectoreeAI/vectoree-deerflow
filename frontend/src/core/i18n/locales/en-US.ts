@@ -1877,8 +1877,6 @@ export const enUS: Translations = {
     sendCode: "Send code",
     resendCodeIn: (seconds: number) => `Resend in ${seconds}s`,
     codeSent: "A verification code was sent to your email.",
-    codeSentIfRegistered:
-      "If your email is registered, we have sent you a verification code. Please check your inbox.",
     passwordMismatch: "Passwords do not match",
     sendCodeFirst: "Send the verification code first",
     registerSuccess: "Account created. Please sign in.",
