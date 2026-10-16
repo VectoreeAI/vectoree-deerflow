@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.gateway.routers import auth as auth_router
-from app.gateway.vectoree_auth import ACCOUNT_NOT_REGISTERED, WALLET_NOT_ACTIVATED, AuthProxyResult, _interpret_auth
+from app.gateway.vectoree_auth import WALLET_NOT_ACTIVATED, AuthProxyResult, _interpret_auth
 
 
 @pytest.fixture
@@ -126,24 +126,6 @@ def test_register_code_points_an_inactive_wallet_at_billing(harness):
         "code": "billing_wallet_not_activated",
         "message": "Organization wallet is not activated",
         "billing_url": "https://vectoree.ai/dashboard/organization/billing",
-    }
-
-
-def test_resend_asks_an_unknown_email_to_register(harness):
-    client, state = harness
-    state["results"]["resend"] = AuthProxyResult(
-        kind="error",
-        http_status=404,
-        message="This account is not registered. Please sign up.",
-        code=ACCOUNT_NOT_REGISTERED,
-    )
-
-    response = client.post("/api/v1/auth/vectoree/resend", json={"email": "new@example.com"})
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == {
-        "code": "account_not_registered",
-        "message": "This account is not registered. Please sign up.",
     }
 
 

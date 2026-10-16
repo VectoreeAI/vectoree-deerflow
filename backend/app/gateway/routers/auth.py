@@ -40,7 +40,7 @@ from app.gateway.auth.user_provisioning import get_or_provision_oidc_user
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, _request_origin, auth_csrf_cookie_settings, generate_csrf_token, is_secure_request
 from app.gateway.deps import forbid_in_cloud, get_current_user_from_request, get_local_provider
 from app.gateway.public_path import cookie_path, public_base_path, public_path
-from app.gateway.vectoree_auth import ACCOUNT_NOT_REGISTERED, WALLET_NOT_ACTIVATED, AuthProxyResult, proxy_vectoree_auth, resolve_vectoree_link, wallet_billing_url
+from app.gateway.vectoree_auth import WALLET_NOT_ACTIVATED, AuthProxyResult, proxy_vectoree_auth, resolve_vectoree_link, wallet_billing_url
 from deerflow.community.vectoree.credentials import is_cloud_mode
 from deerflow.config.auth_config import OIDCProviderConfig
 
@@ -613,19 +613,6 @@ class VectoreeRegisterCompleteRequest(BaseModel):
     otp: str = Field(..., min_length=8, max_length=8)
 
 
-def _reject_unregistered_account(result: AuthProxyResult) -> None:
-    """Tell the user to sign up when Vectoree has no account for this email."""
-    if result.code != ACCOUNT_NOT_REGISTERED:
-        return
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail={
-            "code": ACCOUNT_NOT_REGISTERED,
-            "message": result.message or "This account is not registered. Please sign up.",
-        },
-    )
-
-
 def _reject_inactive_wallet(result: AuthProxyResult, link) -> None:
     """Ask the user to top up instead of showing Vectoree's raw wallet error."""
     if result.code != WALLET_NOT_ACTIVATED:
@@ -711,7 +698,6 @@ async def vectoree_resend(body: VectoreeResendRequest):
         )
     result = await proxy_vectoree_auth(link, "resend", {"email": body.email})
     _reject_inactive_wallet(result, link)
-    _reject_unregistered_account(result)
     if result.kind == "error":
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail={"message": result.message})
     return {"ok": True}
