@@ -1880,6 +1880,7 @@ export const enUS: Translations = {
     passwordMismatch: "Passwords do not match",
     sendCodeFirst: "Send the verification code first",
     registerSuccess: "Account created. Please sign in.",
+    accountNotRegistered: "This email is not registered. Please sign up first.",
     walletActivateBefore: "This organization wallet has not been topped up. Open ",
     walletActivateLink: "organization billing",
     walletActivateAfter: " to add funds, then try again.",
