@@ -1769,6 +1769,9 @@ export const zhCN: Translations = {
     passwordMismatch: "两次输入的密码不一致",
     sendCodeFirst: "请先发送验证码",
     registerSuccess: "账号创建成功，请登录。",
+    walletActivateBefore: "组织钱包尚未充值。请前往",
+    walletActivateLink: "组织账单",
+    walletActivateAfter: "充值后再试。",
     errors: {
       sso_failed: "SSO 登录失败，请重试或使用邮箱登录。",
       sso_cancelled: "SSO 登录已取消。",

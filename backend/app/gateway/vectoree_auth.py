@@ -44,6 +44,15 @@ class AuthProxyResult:
     email: str | None = None
     message: str = ""
     code_length: int | None = None
+    code: str = ""
+
+
+WALLET_NOT_ACTIVATED = "billing_wallet_not_activated"
+
+
+def wallet_billing_url(api_url: str) -> str:
+    """Organization billing page on the Vectoree console that issued this link."""
+    return f"{api_url.rstrip('/')}/dashboard/organization/billing"
 
 
 def resolve_vectoree_link(env: Mapping[str, str] | None = None) -> VectoreeLink | None:
@@ -127,6 +136,13 @@ async def proxy_vectoree_auth(link: VectoreeLink, action: str, body: Mapping[str
             return AuthProxyResult(kind="error", http_status=response.status_code, message="Could not load auth methods")
         length = data.get("codeLength") if isinstance(data, dict) else None
         return AuthProxyResult(kind="ok", http_status=200, code_length=length if isinstance(length, int) else 8)
+    if _is_wallet_inactive(response.status_code, data):
+        return AuthProxyResult(
+            kind="error",
+            http_status=402,
+            message="Organization wallet is not activated",
+            code=WALLET_NOT_ACTIVATED,
+        )
     if action == "resend":
         if response.status_code >= 400:
             return AuthProxyResult(kind="error", http_status=response.status_code, message="Could not resend the code")
@@ -152,6 +168,19 @@ def _interpret_auth(action: str, status: int, data: Any) -> AuthProxyResult:
         return AuthProxyResult(kind="error", http_status=400, message="Email already registered")
     # A 400 carries Vectoree's user-facing reason, e.g. the project's password rules.
     return AuthProxyResult(kind="error", http_status=400, message=_public_message(data) or "Could not create the account")
+
+
+def _is_wallet_inactive(status: int, data: Any) -> bool:
+    """Vectoree returns 402 when the organization wallet has never been topped up."""
+    if status != 402:
+        return False
+    record = data if isinstance(data, dict) else {}
+    code = record.get("code") if isinstance(record.get("code"), str) else ""
+    if not code and isinstance(record.get("error"), str):
+        code = record["error"]
+    if code == "BILLING_WALLET_NOT_ACTIVATED":
+        return True
+    return "wallet is not activated" in _public_message(data).lower()
 
 
 def _public_message(data: Any) -> str:
