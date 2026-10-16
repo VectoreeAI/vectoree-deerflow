@@ -21,6 +21,7 @@ import {
   type SetupStatusResponse,
 } from "@/core/auth/setup";
 import { parseAuthError } from "@/core/auth/types";
+import { readWalletBillingUrl } from "@/core/auth/wallet-billing";
 import { withBasePath } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -80,7 +81,24 @@ export default function LoginPage() {
   const [sendingCode, setSendingCode] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [notice, setNotice] = useState("");
+  const [walletBillingUrl, setWalletBillingUrl] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
+
+  const clearFeedback = () => {
+    setError("");
+    setWalletBillingUrl("");
+  };
+
+  const showAuthFailure = (data: unknown) => {
+    const billingUrl = readWalletBillingUrl(data);
+    if (billingUrl) {
+      setWalletBillingUrl(billingUrl);
+      setError("");
+      return;
+    }
+    setWalletBillingUrl("");
+    setError(parseAuthError(data).message || t.login.networkError);
+  };
 
   const vectoreeRegister = !isLogin && vectoreeLinked;
   const emailCodeLogin = isLogin && vectoreeLinked && loginMethod === "code";
@@ -219,7 +237,7 @@ export default function LoginPage() {
   };
 
   const sendCode = async () => {
-    setError("");
+    clearFeedback();
     setNotice("");
     setShowErrorParam(false);
     const fields = vectoreeRegister ? ["email", "password"] : ["email"];
@@ -252,7 +270,7 @@ export default function LoginPage() {
         created?: boolean;
       };
       if (!res.ok) {
-        setError(parseAuthError(data).message || t.login.networkError);
+        showAuthFailure(data);
         return;
       }
       if (vectoreeRegister && data.created) {
@@ -271,7 +289,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    clearFeedback();
     setNotice("");
     setShowErrorParam(false);
     setShowSsoHint(false);
@@ -306,7 +324,7 @@ export default function LoginPage() {
         );
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          setError(parseAuthError(data).message);
+          showAuthFailure(data);
           return;
         }
         finishRegistration();
@@ -325,7 +343,7 @@ export default function LoginPage() {
         );
         const verifyData = await verifyRes.json().catch(() => ({}));
         if (!verifyRes.ok) {
-          setError(parseAuthError(verifyData).message);
+          showAuthFailure(verifyData);
           return;
         }
         saveRememberLoginPreference({ email, rememberMe });
@@ -361,13 +379,12 @@ export default function LoginPage() {
       };
       if (data.require_email_verification) {
         setNeedsCode(true);
-        setError("");
+        clearFeedback();
         return;
       }
 
       if (!res.ok) {
-        const authError = parseAuthError(data);
-        setError(authError.message);
+        showAuthFailure(data);
         // On a failed login with SSO configured, surface a hint pointing at the
         // SSO buttons — the "wrong password" may really mean "this is an SSO account".
         if (isLogin && !vectoreeLinked && ssoProviders.length > 0) {
@@ -467,7 +484,7 @@ export default function LoginPage() {
                   aria-selected={loginMethod === method}
                   onClick={() => {
                     setLoginMethod(method);
-                    setError("");
+                    clearFeedback();
                     setNotice("");
                     resetCodeState();
                   }}
@@ -581,12 +598,25 @@ export default function LoginPage() {
             </p>
           )}
 
-          {notice && !error && (
+          {notice && !error && !walletBillingUrl && (
             <p role="status" className="text-sm text-green-600">
               {notice}
             </p>
           )}
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {walletBillingUrl ? (
+            <p role="alert" className="text-sm text-red-500">
+              {t.login.walletActivateBefore}
+              <a
+                href={walletBillingUrl}
+                className="font-medium underline underline-offset-2"
+              >
+                {t.login.walletActivateLink}
+              </a>
+              {t.login.walletActivateAfter}
+            </p>
+          ) : (
+            error && <p className="text-sm text-red-500">{error}</p>
+          )}
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading
@@ -653,7 +683,7 @@ export default function LoginPage() {
               type="button"
               onClick={() => {
                 setIsLogin(!isLogin);
-                setError("");
+                clearFeedback();
                 setNotice("");
                 setShowErrorParam(false);
                 setShowSsoHint(false);

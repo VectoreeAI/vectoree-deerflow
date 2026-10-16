@@ -1514,6 +1514,9 @@ export interface Translations {
     passwordMismatch: string;
     sendCodeFirst: string;
     registerSuccess: string;
+    walletActivateBefore: string;
+    walletActivateLink: string;
+    walletActivateAfter: string;
     errors: {
       sso_failed: string;
       sso_cancelled: string;

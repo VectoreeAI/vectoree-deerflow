@@ -21,7 +21,21 @@ import LoginPage from "@/app/(auth)/login/page";
 import { I18nProvider } from "@/core/i18n/context";
 
 function jsonResponse(body: unknown, ok = true) {
-  return { ok, json: async () => body } as Response;
+  return { ok, status: ok ? 200 : 400, json: async () => body } as Response;
+}
+
+function routeResponse(value: unknown): Response {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "body" in value &&
+    "ok" in value &&
+    typeof (value as { ok: unknown }).ok === "boolean"
+  ) {
+    const routed = value as { body: unknown; ok: boolean };
+    return jsonResponse(routed.body, routed.ok);
+  }
+  return jsonResponse(value);
 }
 
 type Call = { url: string; body: unknown };
@@ -43,7 +57,7 @@ function mockGateway(routes: Record<string, unknown>) {
       return jsonResponse({ needs_setup: false, vectoree_linked: true });
     }
     const route = Object.keys(routes).find((path) => url.includes(path));
-    if (route) return jsonResponse(routes[route]);
+    if (route) return routeResponse(routes[route]);
     return jsonResponse({ providers: [] });
   });
   return calls;
@@ -159,5 +173,35 @@ describe("Vectoree email code login", () => {
     expect(
       calls.find((call) => call.url.includes("/vectoree/verify"))?.body,
     ).toMatchObject({ email: "ada@example.com", otp: "87654321" });
+  });
+
+  it("links an unfunded wallet to organization billing", async () => {
+    mockGateway({
+      "/vectoree/resend": {
+        ok: false,
+        body: {
+          detail: {
+            code: "billing_wallet_not_activated",
+            message: "Organization wallet is not activated",
+            billing_url: "https://vectoree.ai/dashboard/organization/billing",
+          },
+        },
+      },
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Email code" }));
+    type("Email", "ada@example.com");
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+
+    const link = await screen.findByRole("link", { name: "organization billing" });
+    expect(link.getAttribute("href")).toBe(
+      "https://vectoree.ai/dashboard/organization/billing",
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "has not been topped up",
+    );
+    expect(screen.queryByText("Organization wallet is not activated")).toBeNull();
+    expect(screen.queryByText("钱包未激活")).toBeNull();
   });
 });

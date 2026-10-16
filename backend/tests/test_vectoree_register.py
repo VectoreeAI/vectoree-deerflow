@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.gateway.routers import auth as auth_router
-from app.gateway.vectoree_auth import AuthProxyResult, _interpret_auth
+from app.gateway.vectoree_auth import WALLET_NOT_ACTIVATED, AuthProxyResult, _interpret_auth
 
 
 @pytest.fixture
@@ -105,6 +105,43 @@ def test_register_code_without_verification_creates_the_account(harness):
     assert response.json() == {"code_sent": False, "created": True}
     assert "access_token=" not in response.headers.get("set-cookie", "")
     assert state["upserted"] == ["ada@example.com"]
+
+
+def test_register_code_points_an_inactive_wallet_at_billing(harness):
+    client, _state = harness
+    _state["results"]["register"] = AuthProxyResult(
+        kind="error",
+        http_status=402,
+        message="Organization wallet is not activated",
+        code=WALLET_NOT_ACTIVATED,
+    )
+
+    response = client.post(
+        "/api/v1/auth/vectoree/register/code",
+        json={"email": "ada@example.com", "password": "Secret123"},
+    )
+
+    assert response.status_code == 402
+    assert response.json()["detail"] == {
+        "code": "billing_wallet_not_activated",
+        "message": "Organization wallet is not activated",
+        "billing_url": "https://vectoree.ai/dashboard/organization/billing",
+    }
+
+
+def test_resend_points_an_inactive_wallet_at_billing(harness):
+    client, state = harness
+    state["results"]["resend"] = AuthProxyResult(
+        kind="error",
+        http_status=402,
+        message="Organization wallet is not activated",
+        code=WALLET_NOT_ACTIVATED,
+    )
+
+    response = client.post("/api/v1/auth/vectoree/resend", json={"email": "ada@example.com"})
+
+    assert response.status_code == 402
+    assert response.json()["detail"]["billing_url"] == "https://vectoree.ai/dashboard/organization/billing"
 
 
 def test_register_requires_a_linked_project(harness, monkeypatch):

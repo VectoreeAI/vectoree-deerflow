@@ -91,3 +91,59 @@ async def test_proxy_login_hides_vectoree_tokens(monkeypatch, status_code, paylo
     assert result == expected
     assert "jwt-secret" not in result.message
     assert "refresh-secret" not in result.message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("action", "body", "status_code", "payload", "code"),
+    [
+        (
+            "resend",
+            {"email": "a@example.com"},
+            402,
+            {"code": "BILLING_WALLET_NOT_ACTIVATED", "message": "Organization wallet is not activated"},
+            "billing_wallet_not_activated",
+        ),
+        (
+            "register",
+            {"email": "a@example.com", "password": "secret"},
+            402,
+            {"message": "Organization wallet is not activated"},
+            "billing_wallet_not_activated",
+        ),
+        (
+            "resend",
+            {"email": "a@example.com"},
+            500,
+            {"message": "Organization wallet is not activated"},
+            "",
+        ),
+    ],
+)
+async def test_proxy_reports_an_inactive_wallet_only_on_402(monkeypatch, action, body, status_code, payload, code):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code, json=payload)
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+
+    class _Client:
+        def __init__(self, **kwargs):
+            kwargs["transport"] = transport
+            self._client = real_client(**kwargs)
+
+        async def __aenter__(self):
+            return self._client
+
+        async def __aexit__(self, *args):
+            await self._client.aclose()
+
+    monkeypatch.setattr(vectoree_auth.httpx, "AsyncClient", _Client)
+    result = await proxy_vectoree_auth(VectoreeLink(api_url="https://vectoree.ai", api_key="sk-ve-v1-test"), action, body)
+
+    assert result.code == code
+    if code:
+        assert result.http_status == 402
+        assert result.message == "Organization wallet is not activated"
+    else:
+        assert result.message == "Could not resend the code"

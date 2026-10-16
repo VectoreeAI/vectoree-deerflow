@@ -1880,6 +1880,9 @@ export const enUS: Translations = {
     passwordMismatch: "Passwords do not match",
     sendCodeFirst: "Send the verification code first",
     registerSuccess: "Account created. Please sign in.",
+    walletActivateBefore: "This organization wallet has not been topped up. Open ",
+    walletActivateLink: "organization billing",
+    walletActivateAfter: " to add funds, then try again.",
     errors: {
       sso_failed: "SSO login failed. Please try again or use email login.",
       sso_cancelled: "SSO login was cancelled.",

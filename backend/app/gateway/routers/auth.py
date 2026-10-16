@@ -40,7 +40,7 @@ from app.gateway.auth.user_provisioning import get_or_provision_oidc_user
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, _request_origin, auth_csrf_cookie_settings, generate_csrf_token, is_secure_request
 from app.gateway.deps import forbid_in_cloud, get_current_user_from_request, get_local_provider
 from app.gateway.public_path import cookie_path, public_base_path, public_path
-from app.gateway.vectoree_auth import proxy_vectoree_auth, resolve_vectoree_link
+from app.gateway.vectoree_auth import WALLET_NOT_ACTIVATED, AuthProxyResult, proxy_vectoree_auth, resolve_vectoree_link, wallet_billing_url
 from deerflow.community.vectoree.credentials import is_cloud_mode
 from deerflow.config.auth_config import OIDCProviderConfig
 
@@ -449,6 +449,7 @@ async def _vectoree_password_result(action: str, email: str, password: str, requ
         result = await proxy_vectoree_auth(link, action, {"email": email, "password": password})
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    _reject_inactive_wallet(result, link)
     if result.kind == "verify":
         return JSONResponse(status_code=status.HTTP_200_OK, content={"require_email_verification": True, "message": result.message})
     if result.kind != "session" or not result.email:
@@ -612,6 +613,20 @@ class VectoreeRegisterCompleteRequest(BaseModel):
     otp: str = Field(..., min_length=8, max_length=8)
 
 
+def _reject_inactive_wallet(result: AuthProxyResult, link) -> None:
+    """Ask the user to top up instead of showing Vectoree's raw wallet error."""
+    if result.code != WALLET_NOT_ACTIVATED:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_402_PAYMENT_REQUIRED,
+        detail={
+            "code": WALLET_NOT_ACTIVATED,
+            "message": result.message or "Organization wallet is not activated",
+            "billing_url": wallet_billing_url(link.api_url),
+        },
+    )
+
+
 def _require_vectoree_link():
     link = resolve_vectoree_link()
     if link is None:
@@ -635,6 +650,7 @@ async def vectoree_register_code(body: VectoreeRegisterCodeRequest):
         result = await proxy_vectoree_auth(link, "register", {"email": body.email, "password": body.password})
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    _reject_inactive_wallet(result, link)
     if result.kind == "verify":
         return {"code_sent": True}
     if result.kind == "session" and result.email:
@@ -681,6 +697,7 @@ async def vectoree_resend(body: VectoreeResendRequest):
             detail=AuthErrorResponse(code=AuthErrorCode.INVALID_CREDENTIALS, message="Link a Vectoree project first").model_dump(),
         )
     result = await proxy_vectoree_auth(link, "resend", {"email": body.email})
+    _reject_inactive_wallet(result, link)
     if result.kind == "error":
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail={"message": result.message})
     return {"ok": True}
