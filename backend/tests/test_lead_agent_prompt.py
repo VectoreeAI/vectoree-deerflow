@@ -799,13 +799,13 @@ def test_apply_prompt_template_uses_bound_web_tool_names(monkeypatch):
     monkeypatch.setattr(prompt_module, "get_skills_prompt_section", lambda *args, **kwargs: "")
     monkeypatch.setattr(prompt_module, "_build_custom_mounts_section", lambda **kwargs: "")
     monkeypatch.setattr(prompt_module, "_build_memory_tool_section", lambda **kwargs: "")
-    vectoree = SimpleNamespace(tools=[SimpleNamespace(name="web-search"), SimpleNamespace(name="web-fetch")])
+    vectoree = SimpleNamespace(tools=[SimpleNamespace(name="vectoree-web-search"), SimpleNamespace(name="web-fetch")])
     historical = SimpleNamespace(tools=[SimpleNamespace(name="web_search"), SimpleNamespace(name="web_fetch")])
 
     vectoree_prompt = prompt_module.apply_prompt_template(app_config=vectoree)
     historical_prompt = prompt_module.apply_prompt_template(app_config=historical)
 
-    assert "Always call `web-search` first" in vectoree_prompt
+    assert "Always call `vectoree-web-search` first" in vectoree_prompt
     assert "Call `web-fetch` only on URLs" in vectoree_prompt
     assert "Always call `web_search` first" in historical_prompt
     assert "Call `web_fetch` only on URLs" in historical_prompt

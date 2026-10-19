@@ -21,12 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.gateway.auth.models import User
 from app.gateway.auth.repositories.base import UserNotFoundError, UserRepository
-from deerflow.persistence.user.model import OAUTH_IDENTITY_INDEX_NAME, UserRow
+from deerflow.persistence.user.model import OAUTH_IDENTITY_INDEX_NAME, PROJECT_EMAIL_INDEX_NAME, UserRow
 
-# ``email`` is ``mapped_column(unique=True, index=True)``, which SQLAlchemy
-# (and 0001_baseline) realise as a single UNIQUE INDEX -- not a named UNIQUE
-# constraint -- so a Postgres duplicate reports the index name here.
-_EMAIL_UNIQUE_INDEX_NAME = "ix_users_email"
+# Before 0027 ``email`` alone was unique via the ``ix_users_email`` UNIQUE
+# INDEX; since then uniqueness is per Vectoree project. A Postgres duplicate
+# reports either index name depending on the schema revision.
+_EMAIL_UNIQUE_INDEX_NAMES = frozenset({"ix_users_email", PROJECT_EMAIL_INDEX_NAME})
 
 
 def _driver_constraint_name(exc: IntegrityError) -> str | None:
@@ -83,7 +83,7 @@ def _is_email_violation(exc: IntegrityError) -> bool:
     names every column)."""
     name = _driver_constraint_name(exc)
     if name is not None:
-        return name == _EMAIL_UNIQUE_INDEX_NAME
+        return name in _EMAIL_UNIQUE_INDEX_NAMES
     return "users.email" in str(exc.orig).lower()
 
 
@@ -145,6 +145,7 @@ class SQLiteUserRepository(UserRepository):
         return User(
             id=UUID(row.id),
             email=row.email,
+            vectoree_project_id=row.vectoree_project_id or "",
             password_hash=row.password_hash,
             system_role=row.system_role,  # type: ignore[arg-type]
             # SQLite loses tzinfo on read; reattach UTC so downstream
@@ -161,6 +162,7 @@ class SQLiteUserRepository(UserRepository):
         return UserRow(
             id=str(user.id),
             email=user.email,
+            vectoree_project_id=user.vectoree_project_id,
             password_hash=user.password_hash,
             system_role=user.system_role,
             created_at=user.created_at,
@@ -188,7 +190,7 @@ class SQLiteUserRepository(UserRepository):
         async with self._sf() as session:
             # The unique constraint is case-sensitive, so it cannot catch a
             # canonical address colliding with a mixed-case legacy row.
-            existing = select(UserRow.id).where(func.lower(UserRow.email) == user.email).limit(1)
+            existing = select(UserRow.id).where(func.lower(UserRow.email) == user.email, UserRow.vectoree_project_id == user.vectoree_project_id).limit(1)
             if await session.scalar(existing) is not None:
                 raise ValueError(f"Email already registered: {user.email}")
             session.add(row)
@@ -227,7 +229,7 @@ class SQLiteUserRepository(UserRepository):
             row = await session.get(UserRow, user_id)
             return self._row_to_user(row) if row is not None else None
 
-    async def get_user_by_email(self, email: str) -> User | None:
+    async def get_user_by_email(self, email: str, *, vectoree_project_id: str = "") -> User | None:
         # Case-insensitive match: an account is keyed by its email regardless of
         # the case the caller supplies (see ``_normalize_email``). ``.first()``
         # with a deterministic ``created_at`` ordering resolves to the oldest
@@ -235,7 +237,7 @@ class SQLiteUserRepository(UserRepository):
         # rows differing only in case, so the fix never turns a legacy duplicate
         # pair into a 500. ``id`` is a secondary tiebreaker so the choice stays
         # deterministic even if two legacy rows share the same ``created_at``.
-        stmt = select(UserRow).where(func.lower(UserRow.email) == _normalize_email(email)).order_by(UserRow.created_at, UserRow.id).limit(1)
+        stmt = select(UserRow).where(func.lower(UserRow.email) == _normalize_email(email), UserRow.vectoree_project_id == vectoree_project_id).order_by(UserRow.created_at, UserRow.id).limit(1)
         async with self._sf() as session:
             result = await session.execute(stmt)
             row = result.scalars().first()

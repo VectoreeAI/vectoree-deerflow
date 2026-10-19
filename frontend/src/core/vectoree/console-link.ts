@@ -63,7 +63,9 @@ export function createConsoleLinker(options: ConsoleLinkerOptions) {
       apiUrl?: string;
       projectId?: string;
     }): Promise<ConnectPublic> {
-      const apiUrl = normalizeApiUrl(input.apiUrl?.trim() || DEFAULT_API_URL);
+      const apiUrl = normalizeApiUrl(
+        [input.apiUrl?.trim()].find(Boolean) ?? DEFAULT_API_URL,
+      );
       const projectId = input.projectId?.trim() ?? "";
       if (!PROJECT_UUID.test(projectId)) {
         throw new ConfigError(
@@ -142,21 +144,23 @@ export function createConsoleLinker(options: ConsoleLinkerOptions) {
           root: options.root,
         },
       );
-      writeLinkedConfig(options.root, {
-        apiUrl: job.apiUrl,
-        accessToken: session.accessToken,
-        refreshToken: session.refreshToken,
-        apiKey: minted.apiKey,
-        projectId: job.projectId,
-        projectName,
-        keyId: minted.keyId,
-      });
+      // The Gateway is what calls Vectoree. Save there first so a failure
+      // cannot leave a frontend-only key that hides /link while chat gets 401.
       await saveGatewayProject({
         apiUrl: job.apiUrl,
         apiKey: minted.apiKey,
         apiBase: apiBaseFor(job.apiUrl),
         accessToken: session.accessToken,
         refreshToken: session.refreshToken,
+        projectId: job.projectId,
+        projectName,
+        keyId: minted.keyId,
+      });
+      writeLinkedConfig(options.root, {
+        apiUrl: job.apiUrl,
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        apiKey: minted.apiKey,
         projectId: job.projectId,
         projectName,
         keyId: minted.keyId,
@@ -184,17 +188,40 @@ export function createConsoleLinker(options: ConsoleLinkerOptions) {
   }
 }
 
-let linker: ReturnType<typeof createConsoleLinker> | null = null;
+const LINKER_KEY = "__deerflowVectoreeConsoleLinker";
+
+type LinkerGlobal = typeof globalThis & {
+  [LINKER_KEY]?: ReturnType<typeof createConsoleLinker>;
+};
 
 export function getConsoleLinker(): ReturnType<typeof createConsoleLinker> {
-  if (linker) return linker;
-  const root = resolveWritableRepoRoot();
-  linker = createConsoleLinker({ root });
-  return linker;
+  const holder = globalThis as LinkerGlobal;
+  holder[LINKER_KEY] ??= createConsoleLinker({
+    root: resolveWritableRepoRoot(),
+  });
+  return holder[LINKER_KEY];
 }
 
 export function resetConsoleLinkerForTests(): void {
-  linker = null;
+  delete (globalThis as LinkerGlobal)[LINKER_KEY];
+}
+
+/** A finished login writes the project key even if this process lost the in-memory job. */
+export function visibleConnectStatus(
+  live: ConnectPublic,
+  saved: { linked: boolean; projectName?: string; apiUrl?: string },
+): ConnectPublic {
+  if (live.status === "linked" || live.status === "error" || !saved.linked) {
+    return live;
+  }
+  const apiUrl = saved.apiUrl ?? live.apiUrl;
+  const projectName = saved.projectName ?? live.projectName;
+  return {
+    status: "linked",
+    ...(apiUrl ? { apiUrl } : {}),
+    ...(live.projectId ? { projectId: live.projectId } : {}),
+    ...(projectName ? { projectName } : {}),
+  };
 }
 
 async function saveGatewayProject(input: {
@@ -351,7 +378,10 @@ async function mintProjectKey(
   }
   const record =
     data && typeof data === "object" ? (data as Record<string, unknown>) : {};
-  if (typeof record.apiKey !== "string" || !record.apiKey.startsWith("sk-ve-")) {
+  if (
+    typeof record.apiKey !== "string" ||
+    !record.apiKey.startsWith("sk-ve-")
+  ) {
     throw new Error("Vectoree did not return a project API key");
   }
   return {
@@ -422,13 +452,15 @@ function listenForCode(
         }
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(
-          "<!doctype html><title>Vectoree</title><body style=\"font-family:sans-serif\"><h1>Vectoree connected</h1><p>You can close this window and return to vectoree-deer-flow.</p></body>",
+          '<!doctype html><title>Vectoree</title><body style="font-family:sans-serif"><h1>Vectoree connected</h1><p>You can close this window and return to vectoree-deer-flow.</p></body>',
         );
         finishOnce(() => settleCode?.(authCode));
       } catch (error) {
         finishOnce(() =>
           failCode?.(
-            error instanceof Error ? error : new Error("Invalid OAuth callback"),
+            error instanceof Error
+              ? error
+              : new Error("Invalid OAuth callback"),
           ),
         );
         if (!res.headersSent) res.writeHead(500).end("Callback failed");

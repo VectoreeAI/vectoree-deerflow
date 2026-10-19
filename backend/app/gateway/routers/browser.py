@@ -114,6 +114,19 @@ async def navigate_browser(thread_id: ThreadId, body: BrowserNavigateRequest, re
     return BrowserNavigateResponse(**result)
 
 
+async def _ws_user_matches_preview(websocket: WebSocket, user, token_project: str) -> bool:
+    """WebSocket upgrades skip ``PreviewMiddleware``, so resolve the preview here."""
+    from app.gateway.auth.preview_session import user_matches_preview
+    from deerflow.community.vectoree.credentials import is_cloud_mode
+
+    if not is_cloud_mode():
+        return True
+    from app.gateway.routers.preview import resolve_preview
+
+    record = await resolve_preview(websocket)
+    return user_matches_preview(user, token_project=token_project, preview_project=record.project_id if record else "")
+
+
 async def _authenticate_ws(websocket: WebSocket):
     """Resolve the user for a WebSocket, honoring auth-disabled mode.
 
@@ -132,7 +145,7 @@ async def _authenticate_ws(websocket: WebSocket):
         if not isinstance(payload, TokenError):
             provider = get_local_provider()
             user = await provider.get_user(payload.sub)
-            if user is not None and user.token_version == payload.ver:
+            if user is not None and user.token_version == payload.ver and await _ws_user_matches_preview(websocket, user, payload.vp):
                 return user
     if is_auth_disabled():
         return get_auth_disabled_user()

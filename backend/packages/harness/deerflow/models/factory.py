@@ -1,8 +1,12 @@
 import logging
+import os
+from urllib.parse import urlsplit
 
 from langchain.chat_models import BaseChatModel
 from langchain_openai.chat_models.base import BaseChatOpenAI
 
+from deerflow.community.vectoree.client import VectoreeConfigError
+from deerflow.community.vectoree.credentials import bound_credentials, is_cloud_mode, normalize_api_url
 from deerflow.config import get_app_config
 from deerflow.config.app_config import AppConfig
 from deerflow.reflection import resolve_class
@@ -20,6 +24,37 @@ def _deep_merge_dicts(base: dict | None, override: dict) -> dict:
         else:
             merged[key] = value
     return merged
+
+
+def _origin(url: str | None) -> tuple[str, str] | None:
+    if not url:
+        return None
+    parsed = urlsplit(str(url))
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return parsed.scheme.lower(), parsed.netloc.lower()
+
+
+def _apply_vectoree_credentials(model_settings_from_config: dict) -> None:
+    """Point Vectoree-hosted models at the key bound to this request or run.
+
+    Only models whose endpoint shares an origin with the Vectoree API are
+    touched; other providers keep their configured credentials. In cloud mode a
+    Vectoree model without a bound preview must fail instead of using the
+    server's own key.
+    """
+    endpoint_key = next((key for key in ("base_url", "openai_api_base", "api_base") if model_settings_from_config.get(key)), None)
+    if endpoint_key is None:
+        return
+    endpoint = _origin(model_settings_from_config[endpoint_key])
+    credentials = bound_credentials()
+    if credentials is not None:
+        if endpoint == _origin(credentials.api_url):
+            model_settings_from_config[endpoint_key] = f"{credentials.api_url}/api/v1"
+            model_settings_from_config["api_key"] = credentials.api_key
+        return
+    if is_cloud_mode() and endpoint == _origin(normalize_api_url(os.environ.get("VECTOREE_API_URL"))):
+        raise VectoreeConfigError("No active Vectoree preview. Reopen DeerFlow from the Vectoree console Preview button.")
 
 
 def _vllm_disable_chat_template_kwargs(chat_template_kwargs: dict) -> dict:
@@ -287,6 +322,7 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
     # Normalize the api_base -> base_url alias FIRST, so the downstream OpenAI-compatible
     # heuristics (stream_usage default below / stream_chunk_timeout) see the canonical endpoint key.
     _normalize_openai_base_url(model_class, model_settings_from_config)
+    _apply_vectoree_credentials(model_settings_from_config)
     _apply_stream_chunk_timeout_default(model_class, model_settings_from_config)
 
     # For Codex Responses API models: map thinking mode to reasoning_effort

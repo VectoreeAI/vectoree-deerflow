@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.gateway.auth.config import get_auth_config
 from app.gateway.csrf_middleware import is_secure_request
+from app.gateway.public_path import public_path
 
 OIDC_STATE_COOKIE_PREFIX = "df_oidc_state_"
 OIDC_STATE_MAX_AGE = 300  # 5 minutes
@@ -99,7 +100,7 @@ def set_state_cookie(response: Response, request: Request, payload: OIDCStatePay
         secure=is_https,
         samesite="lax",
         max_age=OIDC_STATE_MAX_AGE,
-        path=f"/api/v1/auth/callback/{payload.provider}",
+        path=public_path(f"/api/v1/auth/callback/{payload.provider}"),
     )
 
 
@@ -118,5 +119,5 @@ def delete_state_cookie(response: Response, request: Request, provider: str) -> 
         key=_cookie_name(provider),
         secure=is_https,
         samesite="lax",
-        path=f"/api/v1/auth/callback/{provider}",
+        path=public_path(f"/api/v1/auth/callback/{provider}"),
     )

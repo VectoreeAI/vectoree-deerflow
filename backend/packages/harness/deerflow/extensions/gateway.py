@@ -50,6 +50,15 @@ _HOST_PUBLIC_EXACT_PATHS = frozenset(
         "/api/v1/auth/setup-status",
         "/api/v1/auth/initialize",
         "/api/v1/auth/providers",
+        "/api/v1/auth/vectoree/verify",
+        "/api/v1/auth/vectoree/resend",
+        "/api/v1/auth/vectoree/methods",
+        "/api/v1/auth/vectoree/register/code",
+        "/api/v1/auth/vectoree/register/complete",
+        "/api/v1/auth/vectoree/google/start",
+        "/api/v1/auth/vectoree/google/callback",
+        "/api/v1/preview/enter",
+        "/api/v1/preview/status",
     }
 )
 _HOST_CSRF_EXEMPT_EXACT_PATHS = frozenset({"/api/v1/auth/me"})

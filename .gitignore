@@ -78,4 +78,5 @@ config.yaml.bak
 .cursorrules
 .cursor/
 .agent/
+demo/
 openspec/

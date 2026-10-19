@@ -4,6 +4,7 @@ import { StarFilledIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 
 import { NumberTicker } from "@/components/ui/number-ticker";
+import { withBasePath } from "@/core/config";
 
 /**
  * Add the runtime star count to a prerendered header without a client-side token.
@@ -16,7 +17,7 @@ export function StarCounter() {
     const controller = new AbortController();
     // The root layout has no query provider; this one-shot decorative request
     // leaves homepage rendering static and GitHub caching on the server.
-    void fetch("/github-stars", { signal: controller.signal })
+    void fetch(withBasePath("/github-stars"), { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok || response.status === 204) return;
         const data = (await response.json()) as { stars?: unknown };

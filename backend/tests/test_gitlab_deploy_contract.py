@@ -64,14 +64,91 @@ def test_env_example_defaults_web_port_to_5174():
     text = ENV_EXAMPLE.read_text(encoding="utf-8")
 
     assert "DEERFLOW_WEB_PORT=5174" in text
-    assert "DEPLOY_MODE=local" in text
+    assert "DEPLOY_MODE=cloud" in text
+    assert "VECTOREE_IMAGE_MODEL=bytedance-seed/seedream-5-0-pro" in text
+    assert "VECTOREE_VIDEO_MODEL=alibaba/wan-3.0" in text
+    assert "VECTOREE_SPEECH_MODEL=sesame/csm-1b" in text
     assert "DEERFLOW_GATEWAY_IMAGE=" in text
     assert "DEERFLOW_FRONTEND_IMAGE=" in text
     assert "BETTER_AUTH_SECRET=" in text
     assert "DEER_FLOW_INTERNAL_AUTH_TOKEN=" in text
 
 
-def test_gitlab_ci_deploys_only_dev_and_main():
+def test_remote_script_adds_new_template_keys_without_overwriting(tmp_path):
+    import subprocess
+
+    script = REMOTE_SCRIPT.read_text(encoding="utf-8")
+    start = script.index("merge_new_defaults() {")
+    end = script.index("\n}\n", start) + 3
+    (tmp_path / "template").write_text("# note\nKEEP=template\nNEW_KEY=default\nEMPTY=\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("KEEP=mine\n", encoding="utf-8")
+
+    subprocess.run(
+        ["bash", "-c", script[start:end] + "\nmerge_new_defaults template"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    assert (tmp_path / ".env").read_text(encoding="utf-8") == "KEEP=mine\nNEW_KEY=default\nEMPTY=\n"
+    assert script.index("merge_new_defaults deploy/env.example") < script.index("ensure_secret BETTER_AUTH_SECRET")
+
+
+def test_gitlab_ci_deploys_dev_and_main_in_cloud_mode():
+    ci = yaml.safe_load(GITLAB_CI.read_text(encoding="utf-8"))
+    deploy_script = "\n".join(ci[".deploy"]["script"])
+
+    assert ci["deploy_development"]["rules"] == [{"if": '$CI_COMMIT_BRANCH == "dev"'}]
+    assert ci["deploy_production"]["rules"] == [{"if": '$CI_COMMIT_BRANCH == "main"'}]
+    assert ci["deploy_production"]["needs"] == ["test", "backup_main"]
+    assert ci["deploy_development"]["variables"]["DEERFLOW_GATEWAY_IMAGE"].endswith("/gateway:dev")
+    assert "DEPLOY_MODE=cloud" in deploy_script
+    assert 'sudo -E bash "$DEPLOY_PATH/deploy/deploy-remote.sh"' in deploy_script
+    for shipped in ("docker-compose.deploy.yml", "deploy/deploy-remote.sh", "deploy/env.example", "docker/nginx/nginx.conf", "skills/public"):
+        assert shipped in deploy_script
+    assert "skills/custom" not in deploy_script.split("tar czf", 1)[1].split("|", 1)[0]
+
+
+def test_cloud_site_is_built_and_deployed_under_deerflow():
+    ci = yaml.safe_load(GITLAB_CI.read_text(encoding="utf-8"))
+    deploy_script = "\n".join(ci[".deploy"]["script"])
+    script = REMOTE_SCRIPT.read_text(encoding="utf-8")
+    dockerfile = (REPO_ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert ci["variables"]["DEERFLOW_PUBLIC_BASE_PATH"] == "/deerflow"
+    assert '--build-arg NEXT_PUBLIC_BASE_PATH="$DEERFLOW_PUBLIC_BASE_PATH"' in deploy_script
+    assert "DEERFLOW_PUBLIC_BASE_PATH='${DEERFLOW_PUBLIC_BASE_PATH}'" in deploy_script
+    assert 'DEER_FLOW_PUBLIC_BASE_PATH="$DEERFLOW_PUBLIC_BASE_PATH"' in deploy_script
+    assert 'upsert_env DEER_FLOW_PUBLIC_BASE_PATH "$IN_PUBLIC_BASE_PATH"' in script
+    assert "DEER_FLOW_PUBLIC_BASE_PATH=/deerflow" in ENV_EXAMPLE.read_text(encoding="utf-8")
+    builder, prod = dockerfile.split("AS prod", 1)
+    for stage in (builder, prod):
+        assert 'ARG NEXT_PUBLIC_BASE_PATH=""' in stage
+        assert "ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH" in stage
+    assert builder.index("ENV NEXT_PUBLIC_BASE_PATH") < builder.index("pnpm build")
+
+
+def test_remote_script_writes_the_public_base_path_each_deploy(tmp_path):
+    import subprocess
+
+    script = REMOTE_SCRIPT.read_text(encoding="utf-8")
+    start = script.index("upsert_env() {")
+    end = script.index("\n}\n", start) + 3
+    block_start = script.index('if [[ -n "$IN_PUBLIC_BASE_PATH" ]]; then')
+    block_end = script.index("fi\n", block_start) + 3
+    (tmp_path / ".env").write_text("DEER_FLOW_PUBLIC_BASE_PATH=/old\nKEEP=1\n", encoding="utf-8")
+
+    subprocess.run(
+        ["bash", "-c", script[start:end] + '\nIN_PUBLIC_BASE_PATH="/deerflow"\n' + script[block_start:block_end]],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    assert (tmp_path / ".env").read_text(encoding="utf-8") == "KEEP=1\nDEER_FLOW_PUBLIC_BASE_PATH=/deerflow\n"
+
+
+def test_gitlab_ci_checks_backs_up_and_publishes():
     ci = yaml.safe_load(GITLAB_CI.read_text(encoding="utf-8"))
     text = GITLAB_CI.read_text(encoding="utf-8")
     workflow = [rule["if"] for rule in ci["workflow"]["rules"]]
@@ -82,14 +159,11 @@ def test_gitlab_ci_deploys_only_dev_and_main():
     auth_script = "\n".join(ci[".git_auth"]["before_script"])
     github_url = "https://x-access-token:${GITHUB_TOKEN}@github.com/VectoreeAI/vectoree-deerflow.git"
 
-    assert ci["stages"] == [".pre", "check", "publish"]
+    assert ci["stages"] == [".pre", "check", "deploy", "publish"]
     assert '$CI_PIPELINE_SOURCE == "merge_request_event"' in workflow
     assert '$CI_COMMIT_BRANCH == "dev"' in workflow
     assert '$CI_COMMIT_BRANCH == "main"' in workflow
     assert '$CI_PIPELINE_SOURCE == "web"' in workflow
-    for forbidden in ("deploy_development", "deploy_production", ".deploy", "docker login", "ssh ", "scp "):
-        assert forbidden not in ci
-        assert forbidden not in text
 
     assert ci["test"]["image"] == "python:3.12-slim-bookworm"
     assert '$CI_PIPELINE_SOURCE == "merge_request_event"' in test_rules
