@@ -62,7 +62,7 @@ class LocalAuthProvider(AuthProvider):
         """Get user by ID."""
         return await self._repo.get_user_by_id(user_id)
 
-    async def create_user(self, email: str, password: str | None = None, system_role: str = "user", needs_setup: bool = False) -> User:
+    async def create_user(self, email: str, password: str | None = None, system_role: str = "user", needs_setup: bool = False, vectoree_project_id: str = "") -> User:
         """Create a new local user.
 
         Args:
@@ -70,6 +70,7 @@ class LocalAuthProvider(AuthProvider):
             password: Plain text password (will be hashed)
             system_role: Role to assign ("admin" or "user")
             needs_setup: If True, user must complete setup on first login
+            vectoree_project_id: Cloud preview project; empty for local accounts
 
         Returns:
             Created User instance
@@ -80,6 +81,7 @@ class LocalAuthProvider(AuthProvider):
             password_hash=password_hash,
             system_role=system_role,
             needs_setup=needs_setup,
+            vectoree_project_id=vectoree_project_id,
         )
         return await self._repo.create_user(user)
 
@@ -99,9 +101,9 @@ class LocalAuthProvider(AuthProvider):
         """Update an existing user."""
         return await self._repo.update_user(user)
 
-    async def get_user_by_email(self, email: str) -> User | None:
-        """Get user by email."""
-        return await self._repo.get_user_by_email(email)
+    async def get_user_by_email(self, email: str, *, vectoree_project_id: str = "") -> User | None:
+        """Get user by email within a Vectoree project (``""`` for local accounts)."""
+        return await self._repo.get_user_by_email(email, vectoree_project_id=vectoree_project_id)
 
     async def create_oauth_user(
         self,

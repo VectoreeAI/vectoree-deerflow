@@ -1202,8 +1202,12 @@ export const zhCN: Translations = {
     description: "根据你的偏好调整 DeerFlow 的界面和行为。",
     models: {
       title: "模型",
-      description: "管理供用户选择的共享模型。服务器配置中的模型为只读。",
-      adminOnly: "只有管理员可以管理共享模型，演示模式不支持此功能。",
+      description: "服务器内置的模型，对话时可直接选用。",
+      textModels: "语言模型",
+      visionModels: "视觉语言模型",
+      noModels: "暂无可用模型。",
+      manageTitle: "管理共享模型",
+      manageDescription: "为所有用户添加模型。服务器配置中的模型为只读。",
       add: "添加模型",
       loading: "正在加载模型…",
       failed: "请求未能完成。",
@@ -1736,6 +1740,7 @@ export const zhCN: Translations = {
     pleaseWait: "请稍候...",
     signIn: "登录",
     createAccount: "创建账号",
+    register: "注册",
     createAdminAccount: "创建管理员账号",
     adminSetupRequiredTitle: "需要先完成管理员初始化",
     adminSetupRequiredDescription:
@@ -1755,12 +1760,36 @@ export const zhCN: Translations = {
     verificationTitle: "输入发送到邮箱的 8 位验证码。",
     verificationCode: "验证码",
     resendCode: "重新发送验证码",
+    passwordLogin: "密码登录",
+    emailCodeLogin: "邮箱验证码登录",
+    confirmPassword: "确认密码",
+    sendCode: "发送验证码",
+    resendCodeIn: (seconds: number) => `${seconds} 秒后重发`,
+    codeSent: "验证码已发送到你的邮箱。",
+    passwordMismatch: "两次输入的密码不一致",
+    sendCodeFirst: "请先发送验证码",
+    registerSuccess: "账号创建成功，请登录。",
+    walletActivateBefore: "组织钱包尚未充值。请前往",
+    walletActivateLink: "组织账单",
+    walletActivateAfter: "充值后再试。",
     errors: {
       sso_failed: "SSO 登录失败，请重试或使用邮箱登录。",
       sso_cancelled: "SSO 登录已取消。",
       sso_account_exists:
         "该邮箱对应的账号已存在。请使用密码登录或联系管理员。",
       sso_not_allowed: "你的账号不允许使用 SSO 登录。请联系管理员。",
+      google_failed: "Google 登录失败，请重试或使用邮箱登录。",
+      google_not_configured:
+        "关联的 Vectoree 项目还没有配置 Google 登录。请在 Vectoree 控制台的 Authentication → Auth methods 中填写 Google Client ID 和 Secret。",
+      google_email_exists: "该邮箱已用邮箱密码注册过，请使用邮箱登录。",
     },
+  },
+  previewExpired: {
+    title: "预览已过期",
+    description:
+      "这个 DeerFlow 预览链接已失效。请回到 Vectoree 控制台重新打开预览。",
+    unavailableTitle: "暂时无法打开预览",
+    unavailableDescription:
+      "暂时连不上 Vectoree，预览没能打开。请稍后在 Vectoree 控制台重新打开预览。",
   },
 };

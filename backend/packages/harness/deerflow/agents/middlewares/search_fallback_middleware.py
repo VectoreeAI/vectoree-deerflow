@@ -21,7 +21,7 @@ _WEB_SEARCH_TOOL = "web_search"
 # fetch must not pick up a historical web_search result, and the reverse.
 _FETCH_TO_SEARCH = {
     _WEB_FETCH_TOOL: _WEB_SEARCH_TOOL,
-    "web-fetch": "web-search",
+    "web-fetch": "vectoree-web-search",
 }
 _MAX_FALLBACK_CHARS = 8192
 _FALLBACK_HEADER = "## Search results (fallback because fetch returned no content)"

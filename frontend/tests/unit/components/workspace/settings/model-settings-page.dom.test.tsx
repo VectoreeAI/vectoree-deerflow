@@ -57,11 +57,14 @@ afterEach(() => {
   rs.clearAllMocks();
 });
 
-function mount() {
+function mount(models: object[] = []) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  client.setQueryData(["models"], { models: [] });
+  client.setQueryData(["models"], {
+    models,
+    token_usage: { enabled: false },
+  });
   render(
     <QueryClientProvider client={client}>
       <ModelSettingsPage />
@@ -83,6 +86,28 @@ test("non-admin cannot load credentials configuration or add models", () => {
   mount();
   expect(screen.queryByRole("button", { name: "Add model" })).toBeNull();
   expect(loadManagedModels).not.toHaveBeenCalled();
+});
+
+test("every user sees built-in language and vision models read-only", () => {
+  rs.mocked(useAuth).mockReturnValue(auth("user"));
+  mount([
+    { name: "deepseek", model: "deepseek/v4", display_name: "DeepSeek" },
+    {
+      name: "gpt-4o",
+      model: "openai/gpt-4o",
+      display_name: "GPT-4o",
+      supports_vision: true,
+    },
+  ]);
+  const text = screen.getByRole("region", { name: "Language models" });
+  const vision = screen.getByRole("region", {
+    name: "Vision language models",
+  });
+  expect(text.textContent).toContain("DeepSeek");
+  expect(text.textContent).not.toContain("GPT-4o");
+  expect(vision.textContent).toContain("GPT-4o");
+  expect(screen.queryByText(/administrators|demos/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Edit model" })).toBeNull();
 });
 
 test("editing preserves saved key and refreshes chat catalog after saving", async () => {

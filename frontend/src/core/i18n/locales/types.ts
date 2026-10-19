@@ -1082,7 +1082,11 @@ export interface Translations {
     models: {
       title: string;
       description: string;
-      adminOnly: string;
+      textModels: string;
+      visionModels: string;
+      noModels: string;
+      manageTitle: string;
+      manageDescription: string;
       add: string;
       loading: string;
       failed: string;
@@ -1483,6 +1487,7 @@ export interface Translations {
     pleaseWait: string;
     signIn: string;
     createAccount: string;
+    register: string;
     createAdminAccount: string;
     adminSetupRequiredTitle: string;
     adminSetupRequiredDescription: string;
@@ -1500,11 +1505,32 @@ export interface Translations {
     verificationTitle: string;
     verificationCode: string;
     resendCode: string;
+    passwordLogin: string;
+    emailCodeLogin: string;
+    confirmPassword: string;
+    sendCode: string;
+    resendCodeIn: (seconds: number) => string;
+    codeSent: string;
+    passwordMismatch: string;
+    sendCodeFirst: string;
+    registerSuccess: string;
+    walletActivateBefore: string;
+    walletActivateLink: string;
+    walletActivateAfter: string;
     errors: {
       sso_failed: string;
       sso_cancelled: string;
       sso_account_exists: string;
       sso_not_allowed: string;
+      google_failed: string;
+      google_not_configured: string;
+      google_email_exists: string;
     };
+  };
+  previewExpired: {
+    title: string;
+    description: string;
+    unavailableTitle: string;
+    unavailableDescription: string;
   };
 }

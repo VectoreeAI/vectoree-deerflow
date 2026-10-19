@@ -1,3 +1,4 @@
+import { withBasePath } from "@/core/config";
 import { resolveStaticDemoArtifact } from "@/core/threads/static-demo";
 import { checkCodeFile, getFileName } from "@/core/utils/files";
 
@@ -51,7 +52,8 @@ export function resolveArtifactOpenURL({
   if (language !== "markdown" && getTabularDelimiter(language) === null) {
     return urlOfArtifact({ filepath, threadId, isMock });
   }
-  return buildArtifactViewerURL({ filepath, threadId, isMock });
+  // Opened with window.open / <a href>, which Next does not prefix.
+  return withBasePath(buildArtifactViewerURL({ filepath, threadId, isMock }));
 }
 
 /**
@@ -116,7 +118,9 @@ export function parseArtifactViewerQuery(
  * anything an effect writes.
  */
 export function artifactViewerTitle(filepath: string | undefined) {
-  return filepath ? `${getFileName(filepath)} - vectoree-deer-flow` : "vectoree-deer-flow";
+  return filepath
+    ? `${getFileName(filepath)} - vectoree-deer-flow`
+    : "vectoree-deer-flow";
 }
 
 /**

@@ -63,6 +63,43 @@ export function getMessageGroups(
     return null;
   }
 
+  function processingGroupForLateToolResult(
+    message: Extract<Message, { type: "tool" }>,
+  ) {
+    const isStepGroup = (group: MessageGroup) =>
+      group.type !== "human" &&
+      group.type !== "assistant" &&
+      group.type !== "assistant:clarification";
+    const issuer = groups.find(
+      (group) =>
+        isStepGroup(group) &&
+        group.messages.some(
+          (candidate) =>
+            candidate.type === "ai" &&
+            candidate.tool_calls?.some(
+              (call) => call.id === message.tool_call_id,
+            ),
+        ),
+    );
+    if (issuer) {
+      return issuer;
+    }
+    const last = groups[groups.length - 1];
+    if (last?.type !== "assistant") {
+      return null;
+    }
+    for (let index = groups.length - 2; index >= 0; index -= 1) {
+      const group = groups[index]!;
+      if (group.type === "human") {
+        return null;
+      }
+      if (isStepGroup(group)) {
+        return group;
+      }
+    }
+    return null;
+  }
+
   for (const [messageIndex, message] of messages.entries()) {
     if (isHiddenFromUIMessage(message)) {
       continue;
@@ -85,8 +122,14 @@ export function getMessageGroups(
         });
       } else {
         const open = lastOpenGroup();
+        const issuer = open ? null : processingGroupForLateToolResult(message);
         if (open) {
           open.messages.push(message);
+        } else if (issuer) {
+          // A tool result that lands after the final answer belongs with the
+          // step that issued it. Terminal groups render every message as
+          // answer text, so a failed tool's error would show under the answer.
+          issuer.messages.push(message);
         } else {
           // Fallback for orphan tool messages — LangGraph `messages-tuple` can
           // emit tool-result events out of order or replay them from subagent

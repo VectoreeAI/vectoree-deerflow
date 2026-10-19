@@ -10,6 +10,7 @@ from app.gateway.authz import (
 )
 from app.gateway.deps import get_config, get_optional_user_from_request
 from deerflow.authz.provider import AuthzDecision, AuthzRequest
+from deerflow.community.vectoree.catalog import overlay_catalog_models
 from deerflow.config.app_config import AppConfig
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class ModelResponse(BaseModel):
     description: str | None = Field(None, description="Model description")
     supports_thinking: bool = Field(default=False, description="Whether model supports thinking mode")
     supports_reasoning_effort: bool = Field(default=False, description="Whether model supports reasoning effort")
+    supports_vision: bool = Field(default=False, description="Whether model accepts image inputs")
 
 
 class TokenUsageResponse(BaseModel):
@@ -90,7 +92,8 @@ async def list_models(
         }
         ```
     """
-    visible_models = config.models
+    configured_models = overlay_catalog_models(list(config.models))
+    visible_models = configured_models
     fail_closed = config.authorization.fail_closed
 
     user = await get_optional_user_from_request(request)
@@ -103,14 +106,14 @@ async def list_models(
         else:
             if provider is not None and principal is not None:
                 try:
-                    allowed_names = provider.filter_resources(principal, "model", [m.name for m in config.models])
+                    allowed_names = provider.filter_resources(principal, "model", [m.name for m in configured_models])
                     if not isinstance(allowed_names, list) or any(not isinstance(n, str) for n in allowed_names):
                         raise TypeError("AuthorizationProvider.filter_resources must return list[str]")
                     allowed_set = set(allowed_names)
-                    visible_models = [m for m in config.models if m.name in allowed_set]
+                    visible_models = [m for m in configured_models if m.name in allowed_set]
                 except Exception:
                     logger.warning("Authorization provider failed while filtering models", exc_info=True)
-                    visible_models = [] if fail_closed else config.models
+                    visible_models = [] if fail_closed else configured_models
 
     models = [
         ModelResponse(
@@ -120,6 +123,7 @@ async def list_models(
             description=model.description,
             supports_thinking=model.supports_thinking,
             supports_reasoning_effort=model.supports_reasoning_effort,
+            supports_vision=model.supports_vision,
         )
         for model in visible_models
     ]
@@ -202,4 +206,5 @@ async def get_model(
         description=model.description,
         supports_thinking=model.supports_thinking,
         supports_reasoning_effort=model.supports_reasoning_effort,
+        supports_vision=model.supports_vision,
     )

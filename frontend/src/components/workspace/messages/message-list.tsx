@@ -118,6 +118,12 @@ type SettledStreamMetadataState = {
   snapshot: StreamMetadataSnapshot;
 };
 
+// Tool results belong in the steps panel; in a turn bubble they would render
+// as answer text, including failed-tool errors meant only for the model.
+function withoutToolMessages(messages: Message[]) {
+  return messages.filter((message) => message.type !== "tool");
+}
+
 function sameStrings(previous: readonly string[], next: readonly string[]) {
   return (
     previous.length === next.length &&
@@ -1118,7 +1124,7 @@ export function MessageList({
                       group.type === "assistant" && "group/assistant-turn",
                     )}
                   >
-                    {group.messages.map((msg) => {
+                    {withoutToolMessages(group.messages).map((msg) => {
                       const item = (
                         <MessageListItem
                           message={msg}

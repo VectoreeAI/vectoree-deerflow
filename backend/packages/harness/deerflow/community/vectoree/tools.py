@@ -4,10 +4,21 @@ import json
 
 from langchain.tools import tool
 
-from deerflow.community.vectoree.client import EXTRACT_PATH, SEARCH_PATH, post_json
+from deerflow.community.vectoree.client import RUN_PATH, post_json
 from deerflow.config import get_app_config
 
 _EMPTY_FETCH_MESSAGE = "Page extract returned no content."
+# Vectoree rejects longer search queries with 400.
+MAX_QUERY_CHARS = 400
+
+
+def _normalize_url(url: str) -> str:
+    value = url.strip()
+    if value.startswith("//"):
+        return f"https:{value}"
+    if "://" not in value:
+        return f"https://{value}"
+    return value
 
 
 def _normalize_extract_payload(payload: dict) -> dict:
@@ -30,7 +41,7 @@ def _normalize_extract_payload(payload: dict) -> dict:
 
 
 def _max_results(default: int) -> int:
-    config = get_app_config().get_tool_config("web-search")
+    config = get_app_config().get_tool_config("vectoree-web-search")
     if config is None:
         return default
     configured = config.model_extra.get("max_results", default)
@@ -41,7 +52,7 @@ def _max_results(default: int) -> int:
     return value if 1 <= value <= 20 else default
 
 
-@tool("web-search", parse_docstring=True)
+@tool("vectoree-web-search", parse_docstring=True)
 def web_search_tool(query: str, max_results: int = 5) -> str:
     """Search the web using Vectoree Tool Hub.
 
@@ -50,7 +61,8 @@ def web_search_tool(query: str, max_results: int = 5) -> str:
         max_results: Maximum number of results to return. Default is 5.
     """
     limit = _max_results(max_results)
-    payload = post_json(SEARCH_PATH, {"query": query, "max_results": limit})
+    trimmed = query.strip()[:MAX_QUERY_CHARS].rstrip()
+    payload = post_json(RUN_PATH, {"action": "search", "query": trimmed, "max_results": limit})
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
@@ -61,5 +73,5 @@ def web_fetch_tool(url: str) -> str:
     Args:
         url: Absolute URL to extract, including the https:// scheme.
     """
-    payload = _normalize_extract_payload(post_json(EXTRACT_PATH, {"urls": [url]}))
+    payload = _normalize_extract_payload(post_json(RUN_PATH, {"action": "extract", "urls": [_normalize_url(url)]}))
     return json.dumps(payload, indent=2, ensure_ascii=False)

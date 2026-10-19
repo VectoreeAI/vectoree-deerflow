@@ -28,6 +28,7 @@ from fastapi import FastAPI, HTTPException, Request
 from langgraph.types import Checkpointer
 
 from deerflow.community.browser_automation.session import browser_multi_worker_error
+from deerflow.community.vectoree.credentials import is_cloud_mode
 from deerflow.config.app_config import AppConfig, get_app_config
 from deerflow.persistence.feedback import FeedbackRepository
 from deerflow.runtime import ORPHAN_RECOVERY_STOP_REASON, STARTUP_ORPHAN_RECOVERY_ERROR, RunContext, RunManager, StreamBridge
@@ -863,6 +864,14 @@ async def get_current_user_from_request(request: Request):
             detail=AuthErrorResponse(code=AuthErrorCode.TOKEN_INVALID, message="Token revoked (password changed)").model_dump(),
         )
 
+    from app.gateway.auth.preview_session import user_matches_preview
+
+    if not user_matches_preview(user, token_project=payload.vp):
+        raise HTTPException(
+            status_code=401,
+            detail=AuthErrorResponse(code=AuthErrorCode.NOT_AUTHENTICATED, message="Session belongs to another Vectoree preview").model_dump(),
+        )
+
     return user
 
 
@@ -885,7 +894,7 @@ async def is_admin_user(request: Request) -> bool:
     # admin-only routes (skill installs, integration credentials, MCP config).
     from app.gateway.auth_disabled import AUTH_SOURCE_PAT
 
-    if getattr(request.state, "auth_source", None) == AUTH_SOURCE_PAT:
+    if is_cloud_mode() or getattr(request.state, "auth_source", None) == AUTH_SOURCE_PAT:
         return False
     user = getattr(request.state, "user", None)
     if user is None:
@@ -900,9 +909,23 @@ async def require_admin_user(request: Request, *, detail: str) -> None:
     ``detail`` is the route-specific 403 message. The shared predicate keeps
     read-side redaction and write authorization on the same admin definition.
     """
-
+    forbid_in_cloud()
     if not await is_admin_user(request):
         raise HTTPException(status_code=403, detail=detail)
+
+
+CLOUD_FORBIDDEN = "cloud_forbidden"
+
+
+def forbid_in_cloud() -> None:
+    """Reject deployment-wide writes in ``DEPLOY_MODE=cloud``.
+
+    Cloud preview visitors share one Gateway, so nothing a visitor does may
+    change state that other projects see. Cloud has no admin users either;
+    this is the explicit second layer.
+    """
+    if is_cloud_mode():
+        raise HTTPException(status_code=403, detail={"code": CLOUD_FORBIDDEN, "message": "Not available in the DeerFlow cloud preview"})
 
 
 async def get_optional_user_from_request(request: Request):

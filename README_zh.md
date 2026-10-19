@@ -236,7 +236,7 @@ DeerFlow 新近集成了 BytePlus 自研的智能搜索与抓取工具集——[
 
 ### 使用 Vectoree 作为后端
 
-示例配置里的默认聊天模型是 `vectoree/auto`（展示名 Vectoree）。同一把 Vectoree 项目 key 下还预置了 `vectoree-deepseek-v4-pro`，界面显示这个名字，实际请求的模型 id 是 `deepseek/deepseek-v4-pro`。网页搜索和页面抓取也走 Vectoree Tool Hub，但模型看到的工具名是 `web-search` 和 `web-fetch`，不再使用 `web_search` / `web_fetch`。已有的本地 `config.yaml` 需要把这两个已启用条目的 `name` 改成同名，并与工具的 `.name` 保持一致；`use` 仍指向 `deerflow.community.vectoree.tools`。其他供应商继续使用 `web_search` 和 `web_fetch`。运行时只需要一把项目 API key（`sk-ve-v1-`），不需要控制台登录后的 `accessToken`。DeerFlow 自己的登录保持不变。音乐生成（`skills/public/music-generation`）和图片搜索（`image_search`）没有 Vectoree 对应接口，仍使用原来的厂商。
+示例配置里的默认聊天模型是 `vectoree/auto`（展示名 Vectoree）。同一把 Vectoree 项目 key 下还预置了 `vectoree-deepseek-v4-pro`，界面显示这个名字，实际请求的模型 id 是 `deepseek/deepseek-v4-pro`。项目 key 可用时，聊天模型列表还会在读取时叠加上 Model Gateway 目录里输出文本、且不是 decisions 的模型；目录 id 里的 `/` 会换成 `--` 作为 DeerFlow 的 name，真正请求仍用目录 id。目录请求失败时只保留配置里的模型，默认模型仍是 `vectoree`。网页搜索和页面抓取走 Vectoree Tool Hub 的统一入口 `POST /api/tools/v1/vectoree.search/run`，分别带 `action=search` 和 `action=extract`。模型看到的工具名是 `vectoree-web-search` 和 `web-fetch`，不再使用 `web_search` / `web_fetch`。已有的本地 `config.yaml` 需要把已启用的搜索条目 `name` 改成 `vectoree-web-search`，并与工具的 `.name` 保持一致；抓取条目保持 `web-fetch`。`use` 仍指向 `deerflow.community.vectoree.tools`。其他供应商继续使用 `web_search` 和 `web_fetch`。运行时只需要一把项目 API key（`sk-ve-v1-`），不需要控制台登录后的 `accessToken`。音乐生成（`skills/public/music-generation`）和图片搜索（`image_search`）没有 Vectoree 对应接口，仍使用原来的厂商。
 
 1. 在落地页点 **Get Started with 2.0**。`DEPLOY_MODE=cloud` 不进入关联页。未设置或 `DEPLOY_MODE=local` 时，还没关联 Vectoree 会进入 `/link`：粘贴控制台项目 ID 或带项目 ID 的 URL，在浏览器里完成登录。关联成功后进入 `/login`，用 Vectoree 账号注册或登录（需要邮箱验证码时再输入 8 位验证码）。通过后 DeerFlow 签发自己的 HttpOnly 会话 cookie，再进入工作区。项目 key 只留在服务端，模型和工具继续用它。Gateway 每次登录都会从自己的 `/app/.env` 或 `.vectoree/config.json` 读取这把 key。如果进程启动时 key 还是空的，而且文件没有写进该容器，第一次关联后需要重启一次 Gateway。也可以继续用 `npx @vectoree/cli link`，或在控制台 API Keys 页面创建 `sk-ve-v1-`，写入 `.env`：
 
@@ -246,7 +246,7 @@ DeerFlow 新近集成了 BytePlus 自研的智能搜索与抓取工具集——[
    VECTOREE_API_KEY=sk-ve-v1-你的项目密钥
    ```
 
-   `VECTOREE_API_BASE` 必须是 `{VECTOREE_API_URL}/api/v1`。DeerFlow 配置只替换整段 `$变量`。生图、生视频、语音还要各自指定模型名，用 `npx @vectoree/cli ai models list` 查询后填入 `VECTOREE_IMAGE_MODEL`、`VECTOREE_VIDEO_MODEL`、`VECTOREE_SPEECH_MODEL`。
+   `VECTOREE_API_BASE` 必须是 `{VECTOREE_API_URL}/api/v1`。DeerFlow 配置只替换整段 `$变量`。生图、生视频、语音在 `VECTOREE_IMAGE_MODEL`、`VECTOREE_VIDEO_MODEL`、`VECTOREE_SPEECH_MODEL` 已设置时使用该值；未设置时从模型目录里取第一个对应模态的模型。目录里没有该模态时，这次生成会失败，不会调用生成接口。项目已关联后，登录页可以用 Google 登录。Vectoree 项目的 `allowedRedirectUrls` 必须包含 `{公开入口}/api/v1/auth/vectoree/google/callback`，本地公开入口是 `http://localhost:2026`。邮箱密码登录仍然可用。
 
 2. 生成配置：`make config`（把 `config.example.yaml` 复制为 `config.yaml`）。
 
@@ -257,6 +257,17 @@ DeerFlow 新近集成了 BytePlus 自研的智能搜索与抓取工具集——[
    ```
 
    没有 Docker 时用 `make dev`。浏览器打开 http://localhost:2026 。
+
+#### 云端预览（`DEPLOY_MODE=cloud`）
+
+云端部署由多个 Vectoree 项目共用，不做关联，也没有管理员。用户在 Vectoree 模板里点“预览”，浏览器打开 `https://<公网入口>/deerflow?ticket=…`。nginx 把带 `ticket` 的入口转给 `GET /api/v1/preview/enter`，Gateway 用 `VECTOREE_API_URL` 兑换 ticket，拿到该项目的 key，存在服务端（有 `DEER_FLOW_STREAM_BRIDGE_REDIS_URL` 时存 Redis，否则存内存，重启即失效），只给浏览器一个 HttpOnly 预览 cookie，然后跳到 `/deerflow/login`。之后模型、搜索、生图和对话都使用这个项目的 key；账号按“项目 + 邮箱”区分，会话只在签发它的项目预览下有效。ticket 无效或已用过时跳到 `/deerflow/preview-expired`，连不上 Vectoree 时带 `?reason=unavailable`；预览闲置 12 小时后失效，需要回到 Vectoree 重新点“预览”。cloud 模式下 `/initialize`、项目 key 写入接口和所有共享配置的写接口都返回 403 `cloud_forbidden`。
+
+整个站点挂在 `/deerflow` 下，需要两处配置，取值相同：
+
+- 构建前端镜像时传 `--build-arg NEXT_PUBLIC_BASE_PATH=/deerflow`（构建期写进页面）。
+- Gateway 运行时设置 `DEER_FLOW_PUBLIC_BASE_PATH=/deerflow`（cookie 路径、OAuth 回调地址和跳转地址都会加上它）。
+
+GitLab CI 用变量 `DEERFLOW_PUBLIC_BASE_PATH`（默认 `/deerflow`）同时设置这两处，并在部署时写入服务器的 `.env`。服务器还需要 `DEPLOY_MODE=cloud`、`VECTOREE_API_URL` 和 `BETTER_AUTH_SECRET`。公网反向代理把 `/deerflow` 原样转给 DeerFlow 的 nginx（端口 2026），**不要去掉前缀**，并保留 `Host` 和 `X-Forwarded-Proto`。Vectoree 项目开启 Google 登录时，`allowedRedirectUrls` 要包含 `https://<公网入口>/deerflow/api/v1/auth/vectoree/google/callback`。本地部署不设置这两个变量，站点仍在根路径。
 
 ### 运行应用
 
