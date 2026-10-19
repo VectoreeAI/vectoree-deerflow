@@ -585,8 +585,6 @@ class AppConfig(BaseModel):
             if config.startswith("$"):
                 env_value = os.getenv(config[1:])
                 if env_value is None:
-                    env_value = _cloud_vectoree_default(config[1:])
-                if env_value is None:
                     raise ValueError(f"Environment variable {config[1:]} not found for config value {config}")
                 return env_value
             return config
@@ -630,15 +628,7 @@ class AppConfig(BaseModel):
         Returns:
             The model config if found, otherwise None.
         """
-        found = self._models_by_name.get(name)
-        if found is not None:
-            return found
-        from deerflow.community.vectoree.catalog import overlay_catalog_models
-
-        for model in overlay_catalog_models(self.models):
-            if model.name == name:
-                return model
-        return None
+        return self._models_by_name.get(name)
 
     def get_tool_config(self, name: str) -> ToolConfig | None:
         """Get the tool config by name.
@@ -675,19 +665,6 @@ _dotenv_mtime: float | None = None
 _VECTOREE_DOTENV_KEYS = ("VECTOREE_API_URL", "VECTOREE_API_KEY", "VECTOREE_API_BASE")
 _current_app_config: ContextVar[AppConfig | None] = ContextVar("deerflow_current_app_config", default=None)
 _current_app_config_stack: ContextVar[tuple[AppConfig | None, ...]] = ContextVar("deerflow_current_app_config_stack", default=())
-
-
-def _cloud_vectoree_default(name: str) -> str | None:
-    """Cloud servers hold no project key; each request brings its preview's key."""
-    from deerflow.community.vectoree.credentials import is_cloud_mode, normalize_api_url
-
-    if not is_cloud_mode():
-        return None
-    if name == "VECTOREE_API_KEY":
-        return ""
-    if name == "VECTOREE_API_BASE":
-        return f"{normalize_api_url(os.environ.get('VECTOREE_API_URL'))}/api/v1"
-    return None
 
 
 def _get_config_mtime(config_path: Path) -> float | None:

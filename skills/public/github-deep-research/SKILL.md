@@ -7,7 +7,7 @@ description: Conduct multi-round deep research on any GitHub Repo. Use when user
 
 Multi-round research combining GitHub API, web search, and page fetch to produce comprehensive markdown reports.
 
-**Tool names:** Call the search and page-fetch tools that are actually available. The default Vectoree install exposes `vectoree-web-search` and `web-fetch`. Other providers still expose `web_search` and `web_fetch`.
+**Tool names:** Call the search and page-fetch tools that are actually available. The default Vectoree install exposes `web-search` and `web-fetch`. Other providers still expose `web_search` and `web_fetch`.
 
 ## Research Workflow
 

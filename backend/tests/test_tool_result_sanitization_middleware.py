@@ -38,7 +38,7 @@ def _msg(content, *, name: str, tool_call_id: str = "tc-1") -> ToolMessage:
 class TestRemoteToolResultsNeutralized:
     def test_vectoree_web_tools_are_sanitized(self):
         mw = ToolResultSanitizationMiddleware()
-        for name in ("vectoree-web-search", "web-fetch"):
+        for name in ("web-search", "web-fetch"):
             result = mw.wrap_tool_call(_request(name), lambda _, tool_name=name: _msg(_MALICIOUS_PAGE, name=tool_name))
             assert isinstance(result, ToolMessage)
             assert "&lt;system-reminder&gt;" in result.content

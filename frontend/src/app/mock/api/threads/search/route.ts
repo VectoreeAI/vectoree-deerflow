@@ -1,4 +1,3 @@
-import { withBasePath } from "@/core/config";
 import { DEMO_THREAD_IDS } from "@/core/threads/static-demo";
 
 type ThreadSearchRequest = {
@@ -44,9 +43,7 @@ export async function POST(request: Request) {
         async (threadId): Promise<MockThreadSearchResult | null> => {
           const response = await fetch(
             new URL(
-              withBasePath(
-                `/demo/threads/${encodeURIComponent(threadId)}/thread.json`,
-              ),
+              `/demo/threads/${encodeURIComponent(threadId)}/thread.json`,
               origin,
             ),
             { signal: request.signal },

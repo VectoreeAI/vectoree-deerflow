@@ -49,7 +49,6 @@ import { getAPIClient } from "@/core/api";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { hasPermission, PERMISSIONS } from "@/core/auth/permissions";
 import { writeTextToClipboard } from "@/core/clipboard";
-import { getBasePath } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { useProjects } from "@/core/projects";
 import { useLocalSettings } from "@/core/settings";
@@ -177,9 +176,7 @@ export function ThreadSidebarItem({
       window.location.hostname === "localhost" ||
       window.location.hostname === "127.0.0.1";
     // On localhost: use Vercel URL; On production: use current origin
-    const baseUrl = isLocalhost
-      ? VERCEL_URL
-      : `${window.location.origin}${getBasePath()}`;
+    const baseUrl = isLocalhost ? VERCEL_URL : window.location.origin;
     const shareUrl = `${baseUrl}${pathOfThread(thread)}`;
     try {
       const didCopy = await writeTextToClipboard(shareUrl);

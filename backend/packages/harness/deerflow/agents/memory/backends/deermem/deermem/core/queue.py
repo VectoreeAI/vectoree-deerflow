@@ -16,8 +16,6 @@ without a persistence layer.
 
 from __future__ import annotations
 
-import contextvars
-import functools
 import logging
 import threading
 import time
@@ -70,9 +68,6 @@ class ConversationContext:
     # so a flush cannot drop a pending normal update's un-extracted tail. See
     # ``_enqueue_locked``'s match-key + backpressure handling.
     bypass_watermark: bool = False
-    # The enqueuing caller's ContextVars (e.g. per-request model credentials).
-    # The debounce Timer runs on a raw thread that would otherwise start empty.
-    ambient: contextvars.Context | None = field(default=None, compare=False, repr=False)
 
 
 class MemoryUpdateQueue:
@@ -202,7 +197,6 @@ class MemoryUpdateQueue:
             trace_id=trace_id,
             signals=merged_signals,
             bypass_watermark=bypass_watermark,
-            ambient=contextvars.copy_context(),
         )
         if existing is not None:
             self._items = [c for c in self._items if not (queue_key(c.thread_id, c.user_id, c.agent_name) == key and c.bypass_watermark == bypass_watermark)]
@@ -265,8 +259,7 @@ class MemoryUpdateQueue:
             for context in contexts_to_process:
                 try:
                     logger.info("Updating memory for thread %s (trace_id=%s)", context.thread_id, context.trace_id)
-                    update = functools.partial(
-                        self._updater.update_memory,
+                    success = self._updater.update_memory(
                         messages=context.messages,
                         thread_id=context.thread_id,
                         agent_name=context.agent_name,
@@ -275,7 +268,6 @@ class MemoryUpdateQueue:
                         trace_id=context.trace_id,
                         bypass_watermark=context.bypass_watermark,
                     )
-                    success = context.ambient.copy().run(update) if context.ambient is not None else update()
                     if success:
                         succeeded += 1
                         logger.info("Memory updated successfully for thread %s (trace_id=%s)", context.thread_id, context.trace_id)

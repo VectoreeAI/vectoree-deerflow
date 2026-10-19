@@ -1026,7 +1026,7 @@ Memory is running in tool mode. When present, the injected <memory> block contai
 </memory_tool_system>"""
 
 
-_SEARCH_TOOL_CANDIDATES = ("vectoree-web-search", "web-search", "web_search")
+_SEARCH_TOOL_CANDIDATES = ("web-search", "web_search")
 _FETCH_TOOL_CANDIDATES = ("web-fetch", "web_fetch")
 
 

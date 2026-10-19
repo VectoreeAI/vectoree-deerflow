@@ -16,7 +16,6 @@ import {
   isSystemAlreadyInitializedError,
 } from "@/core/auth/setup";
 import { parseAuthError } from "@/core/auth/types";
-import { withBasePath } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 
 type SetupMode = "loading" | "init_admin" | "change_password" | "unavailable";
@@ -86,7 +85,7 @@ export default function SetupPage() {
 
     setLoading(true);
     try {
-      const res = await fetch(withBasePath("/api/v1/auth/initialize"), {
+      const res = await fetch("/api/v1/auth/initialize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -132,7 +131,7 @@ export default function SetupPage() {
 
     setLoading(true);
     try {
-      const res = await fetch(withBasePath("/api/v1/auth/change-password"), {
+      const res = await fetch("/api/v1/auth/change-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

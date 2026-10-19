@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
  * for Docker builds.
  */
 import "./src/env.js";
-import { getBasePath } from "./src/base-path.js";
 import { getAllowedDevOrigins } from "./src/dev-origins.js";
 
 function getInternalServiceURL(envKey, fallbackURL) {
@@ -20,7 +19,6 @@ const withNextra = nextra({});
 
 /** @type {import("next").NextConfig} */
 const config = {
-  basePath: getBasePath() || undefined,
   output:
     process.env.NEXT_CONFIG_BUILD_OUTPUT === "standalone"
       ? "standalone"

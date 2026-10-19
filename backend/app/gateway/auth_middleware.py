@@ -56,12 +56,6 @@ _PUBLIC_EXACT_PATHS: frozenset[str] = frozenset(
         "/api/v1/auth/vectoree/verify",
         "/api/v1/auth/vectoree/resend",
         "/api/v1/auth/vectoree/methods",
-        "/api/v1/auth/vectoree/register/code",
-        "/api/v1/auth/vectoree/register/complete",
-        "/api/v1/auth/vectoree/google/start",
-        "/api/v1/auth/vectoree/google/callback",
-        "/api/v1/preview/enter",
-        "/api/v1/preview/status",
     }
 )
 
@@ -139,13 +133,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 user, pat_scopes = await authenticate_pat(request.app, authorization)
             except HTTPException as exc:
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-            from app.gateway.auth.preview_session import user_matches_preview
-
-            if not user_matches_preview(user):
-                return JSONResponse(
-                    status_code=401,
-                    content={"detail": AuthErrorResponse(code=AuthErrorCode.NOT_AUTHENTICATED, message="Token belongs to another Vectoree preview").model_dump()},
-                )
             # Default-deny route boundary (#5041 review P1-1): scopes only
             # constrain @require_permission routes, so any route outside the
             # explicit PAT policy is closed to PAT callers outright — an

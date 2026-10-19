@@ -1,5 +1,4 @@
 import { buildLoginUrl } from "@/core/auth/types";
-import { stripBasePath, withBasePath } from "@/core/config";
 import { isStaticWebsiteOnly } from "@/core/static-mode";
 
 import { UnauthorizedError } from "./errors";
@@ -100,10 +99,8 @@ export async function fetch(
     // Include the search string: routes that carry their target in the query
     // (e.g. the standalone artifact viewer) are otherwise unrecoverable after
     // login, which lands on the default workspace instead.
-    window.location.href = withBasePath(
-      buildLoginUrl(
-        `${stripBasePath(window.location.pathname)}${window.location.search}`,
-      ),
+    window.location.href = buildLoginUrl(
+      `${window.location.pathname}${window.location.search}`,
     );
     throw new UnauthorizedError();
   }

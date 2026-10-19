@@ -53,7 +53,7 @@ class UserRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def get_user_by_email(self, email: str, *, vectoree_project_id: str = "") -> User | None:
+    async def get_user_by_email(self, email: str) -> User | None:
         """Get user by email.
 
         Args:

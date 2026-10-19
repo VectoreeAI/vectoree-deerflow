@@ -8,9 +8,8 @@ import { Button } from "@/components/ui/button";
 import { FlickeringGrid } from "@/components/ui/flickering-grid";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { withBasePath } from "@/core/config";
-import { extractProjectId } from "@/core/vectoree/project-id";
 import { needsLinkPage, readLinkGate } from "@/core/vectoree/project-linked";
+import { extractProjectId } from "@/core/vectoree/project-id";
 
 type ConnectStatus = {
   status?: "idle" | "pending" | "linked" | "error";
@@ -19,13 +18,6 @@ type ConnectStatus = {
   projectName?: string;
   linked?: boolean;
 };
-
-function navigateLoginPopup(popup: Window | null, url: string): void {
-  const target = popup && !popup.closed ? popup : window.open(url, "_blank");
-  if (!target) return;
-  if (target === popup) target.location.replace(url);
-  target.opener = null;
-}
 
 export default function LinkVectoreePage() {
   const router = useRouter();
@@ -38,7 +30,6 @@ export default function LinkVectoreePage() {
   const [pending, setPending] = useState(false);
   const [projectName, setProjectName] = useState("");
   const [linked, setLinked] = useState(false);
-  const [linkedMessage, setLinkedMessage] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -58,21 +49,20 @@ export default function LinkVectoreePage() {
   useEffect(() => {
     if (!pending) return undefined;
     let cancelled = false;
-    const pull = () => {
-      void fetch(withBasePath("/api/vectoree/link"), { cache: "no-store" })
+    const timer = window.setInterval(() => {
+      void fetch("/api/vectoree/link")
         .then((response) => response.json() as Promise<ConnectStatus>)
         .then((status) => {
           if (cancelled) return;
           if (status.authorizeUrl) setAuthorizeUrl(status.authorizeUrl);
-          if (status.status === "linked" || status.linked) {
+          if (status.status === "linked") {
             setPending(false);
             setLinked(true);
             setProjectName(status.projectName ?? "");
-            setLinkedMessage(status.message ?? "");
             setError("");
           } else if (status.status === "error") {
             setPending(false);
-            setError(status.message ?? "Could not connect Vectoree");
+            setError(status.message || "Could not connect Vectoree");
           }
         })
         .catch(() => {
@@ -80,9 +70,7 @@ export default function LinkVectoreePage() {
           setPending(false);
           setError("Could not reach the local link service");
         });
-    };
-    pull();
-    const timer = window.setInterval(pull, 1000);
+    }, 1000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -100,32 +88,22 @@ export default function LinkVectoreePage() {
   }
 
   async function onConnect() {
-    // Open during the click. A window.open after await is blocked, and the
-    // server-side `open` cannot reach the user's browser from Docker.
-    const popup = window.open("", "_blank");
     setError("");
     setAuthorizeUrl("");
     setPending(true);
     try {
-      const response = await fetch(withBasePath("/api/vectoree/link/start"), {
+      const response = await fetch("/api/vectoree/link/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiUrl, projectId }),
       });
       const status = (await response.json()) as ConnectStatus;
-      if (status.authorizeUrl) {
-        setAuthorizeUrl(status.authorizeUrl);
-        navigateLoginPopup(popup, status.authorizeUrl);
-      } else {
-        popup?.close();
-      }
+      if (status.authorizeUrl) setAuthorizeUrl(status.authorizeUrl);
       if (!response.ok || status.status === "error") {
-        popup?.close();
         setPending(false);
-        setError(status.message ?? "Could not connect Vectoree");
+        setError(status.message || "Could not connect Vectoree");
       }
     } catch {
-      popup?.close();
       setPending(false);
       setError("Could not connect Vectoree");
     }
@@ -158,19 +136,11 @@ export default function LinkVectoreePage() {
             <p className="text-sm">
               Linked{projectName ? ` to ${projectName}` : ""}.
             </p>
-            {linkedMessage ? (
-              <p className="text-sm text-red-500" role="alert">
-                {linkedMessage}
-              </p>
-            ) : null}
             <p className="text-muted-foreground text-sm">
               The project key is saved in this container&apos;s /app directory.
               The Gateway writes the same key into its own /app directory.
             </p>
-            <Button
-              className="w-full"
-              onClick={() => router.push("/login?next=/workspace")}
-            >
+            <Button className="w-full" onClick={() => router.push("/login?next=/workspace")}>
               Continue to sign in
             </Button>
           </div>

@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { Card } from "@/components/ui/card";
-import { withBasePath } from "@/core/config";
 import { pathOfPublicDemoThread } from "@/core/threads/static-demo";
 import { cn } from "@/lib/utils";
 
@@ -63,7 +62,7 @@ export function CaseStudySection({ className }: { className?: string }) {
           >
             <Card className="group/card relative h-64 overflow-hidden">
               <Image
-                src={withBasePath(`/images/${caseStudy.threadId}.jpg`)}
+                src={`/images/${caseStudy.threadId}.jpg`}
                 alt={`${caseStudy.title} preview`}
                 width={640}
                 height={360}

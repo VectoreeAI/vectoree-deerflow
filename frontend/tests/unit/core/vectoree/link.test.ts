@@ -5,11 +5,6 @@ import path from "node:path";
 import { describe, expect, test } from "@rstest/core";
 
 import {
-  getConsoleLinker,
-  resetConsoleLinkerForTests,
-  visibleConnectStatus,
-} from "@/core/vectoree/console-link";
-import {
   apiBaseFor,
   publicJson,
   readPublicLinkStatus,
@@ -142,45 +137,6 @@ describe("vectoree link files", () => {
     const env = { ...process.env };
     delete env.DEER_FLOW_PROJECT_ROOT;
     expect(resolveWritableRepoRoot(nested, env, app)).toBe(path.resolve(app));
-  });
-
-  test("reports a saved project key when the in-memory login job was lost", () => {
-    expect(
-      visibleConnectStatus(
-        { status: "pending", authorizeUrl: "https://vectoree.ai/authorize" },
-        { linked: true, projectName: "Demo", apiUrl: "https://vectoree.ai" },
-      ),
-    ).toEqual({
-      status: "linked",
-      apiUrl: "https://vectoree.ai",
-      projectName: "Demo",
-    });
-  });
-
-  test("keeps an in-memory error ahead of a saved key", () => {
-    expect(
-      visibleConnectStatus(
-        { status: "error", message: "gateway rejected the key" },
-        { linked: true },
-      ),
-    ).toEqual({ status: "error", message: "gateway rejected the key" });
-  });
-
-  test("shares one linker across route handlers", () => {
-    const root = tempRoot();
-    const previous = process.env.DEER_FLOW_PROJECT_ROOT;
-    process.env.DEER_FLOW_PROJECT_ROOT = root;
-    resetConsoleLinkerForTests();
-    try {
-      expect(getConsoleLinker()).toBe(getConsoleLinker());
-    } finally {
-      resetConsoleLinkerForTests();
-      if (previous === undefined) {
-        delete process.env.DEER_FLOW_PROJECT_ROOT;
-      } else {
-        process.env.DEER_FLOW_PROJECT_ROOT = previous;
-      }
-    }
   });
 
   test("rejects discovery outside a repository", () => {
